@@ -155,7 +155,7 @@ export default function LoginPage() {
         </Card>
         
         <p className="text-center text-sm text-muted-foreground mt-8" data-testid="text-support">
-          Need help? Contact the community centre coordinator.
+          Contact NHS officers for questions.
         </p>
       </div>
     </div>

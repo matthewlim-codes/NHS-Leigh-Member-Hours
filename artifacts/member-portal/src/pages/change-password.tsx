@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -86,6 +86,16 @@ export default function ChangePasswordPage() {
             Please choose a new password for your first sign-in
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setLocation("/login")}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+          data-testid="button-back-to-login"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to login
+        </button>
 
         <Card className="shadow-lg border-muted/50">
           <CardHeader>

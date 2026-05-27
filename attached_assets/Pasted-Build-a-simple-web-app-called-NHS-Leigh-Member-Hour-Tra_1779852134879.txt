@@ -1,0 +1,68 @@
+Build a simple web app called “NHS (Leigh) Member Hour Tracker”.
+
+Goal:
+A private member portal for an NHS-style club that reads member names and volunteer hours from a continuously updating Google Sheets spreadsheet. Each member gets a pre-generated username and temporary password, can log in, must change their password on first login, and then sees a simple dashboard showing their name and volunteer hours.
+
+Core features:
+1. Google Sheets connection
+- Use Google Sheets as the spreadsheet source.
+- The sheet is the source of truth for member data.
+- The app must always reflect the latest Google Sheets data whenever a user logs in or refreshes their dashboard.
+- If a member’s name or hours change in the sheet, the user’s dashboard should show the updated data automatically on the next view.
+
+2. Username generation
+- Username format should be the member’s name with spaces replaced by hyphens.
+- Example: “Elvis Presley” becomes “Elvis-Presley”.
+- Normalize spacing and trim extra characters so usernames are consistent.
+
+3. Temporary password generation
+- For the initial password, generate it from the number of letters in the first name, the number of letters in the second name, plus the alphabet letter corresponding to those numbers.
+- Example format: “57eg” for Elvis Presley.
+- Make the password generation logic deterministic so the same name always produces the same temporary password.
+- Support names with more than two words in a sensible way, but keep the rule simple and consistent.
+
+4. First-time login flow
+- On first successful login with the temporary password, the user MUST immediately change their password.
+- The new password must be different from the temporary password.
+- Recommend a stronger password and enforce a reasonable minimum length.
+- Do not let the user access the dashboard until the password has been changed.
+- Store passwords securely, never in plain text.
+
+5. Dashboard
+- After login, show one very simple dashboard.
+- Display the user’s name at the top.
+- Display their total volunteer hours in the middle of the screen.
+- Add a logout button in the top-right corner.
+- Keep the UI clean, minimal, and easy for non-technical users.
+
+6. Authentication and accounts
+- Build a secure login system with session handling.
+- Allow only one account per member.
+- Create each account uniquely from the spreadsheet row for that member.
+- Support password updates after first login.
+- Add basic protections like input validation and error handling.
+
+7. Admin/data behavior
+- The Google Sheet remains the main data source.
+- The app should detect updated names or hours from the spreadsheet and reflect those changes.
+- If a username changes because a name changes, handle that gracefully.
+- If a member is missing from the spreadsheet, prevent login or show an account error.
+
+8. UX requirements
+- Mobile-friendly and simple.
+- Use plain language.
+- Make the app feel like a straightforward member portal, not a full admin system.
+
+Implementation notes:
+- Build the smallest working version first.
+- Choose a stack that works well in Replit.
+- Include a clear way to configure Google Sheets access, such as API credentials or a service account.
+- Include seed/demo data so the app can be tested immediately.
+- Make sure all member data is treated securely.
+
+Deliverables:
+- Working login page.
+- First-login password change page.
+- Dashboard page.
+- Google Sheets sync logic.
+- Clear setup instructions in the project README.

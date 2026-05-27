@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useChangePassword, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useChangePassword, useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,17 @@ export default function ChangePasswordPage() {
     }
   }, [isSuccess, isError, user, setLocation]);
 
+  const logoutMutation = useLogout();
   const changePasswordMutation = useChangePassword();
+
+  const handleBackToLogin = () => {
+    logoutMutation.mutate(undefined, {
+      onSettled: () => {
+        queryClient.removeQueries({ queryKey: getGetMeQueryKey() });
+        setLocation("/login");
+      },
+    });
+  };
 
   const form = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
@@ -89,7 +99,7 @@ export default function ChangePasswordPage() {
 
         <button
           type="button"
-          onClick={() => setLocation("/login")}
+          onClick={handleBackToLogin}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
           data-testid="button-back-to-login"
         >

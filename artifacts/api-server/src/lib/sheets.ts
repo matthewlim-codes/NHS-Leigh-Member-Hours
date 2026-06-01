@@ -15,6 +15,8 @@ const INFO_FORM_HEADER = "info form";
 const CLUB_DUES_HEADER = "club dues";
 const HOURS_HEADER = "total hours";
 const SEMESTER_1_HEADER = "sem 1 hours";
+const HW_CENTER_SUBHEADER = "hw center";
+const TUTORIAL_SUBHEADER = "tutorial";
 const HEADER_SCAN_ROW_COUNT = 5;
 
 const MONTHS = [
@@ -157,11 +159,12 @@ function findMemberColumns(rows: string[][]): MemberColumns | null {
   const clubDuesHeader = findHeader(rows, CLUB_DUES_HEADER);
   const hoursHeader = findHeader(rows, HOURS_HEADER);
   const semester1Header = findHeader(rows, SEMESTER_1_HEADER);
-  const monthColumns = findMonthColumns(rows);
 
   if (!studentIdHeader || !nameHeader) {
     return null;
   }
+
+  const dataStartRow = Math.max(studentIdHeader.row, nameHeader.row) + 1;
 
   return {
     studentIdColumn: studentIdHeader.column,
@@ -171,25 +174,66 @@ function findMemberColumns(rows: string[][]): MemberColumns | null {
     clubDuesColumn: clubDuesHeader?.column ?? null,
     hoursColumn: hoursHeader?.column ?? null,
     semester1Column: semester1Header?.column ?? null,
-    monthColumns,
-    dataStartRow: Math.max(studentIdHeader.row, nameHeader.row) + 1,
+    monthColumns: findMonthColumns(rows, dataStartRow),
+    dataStartRow,
   };
 }
 
-function findMonthColumns(rows: string[][]): MonthColumns[] {
-  return MONTHS.flatMap((month) => {
+function findMonthColumns(rows: string[][], dataStartRow: number): MonthColumns[] {
+  const monthHeaders = MONTHS.flatMap((month) => {
     const header = findHeader(rows, month);
     if (!header) {
       return [];
     }
 
+    return [{ month, shortLabel: month.slice(0, 3).toUpperCase(), ...header }];
+  });
+
+  return monthHeaders.flatMap((header) => {
+    const nextMonthColumn = monthHeaders
+      .filter((monthHeader) => monthHeader.column > header.column)
+      .reduce<number | null>((closest, monthHeader) => {
+        if (closest === null || monthHeader.column < closest) return monthHeader.column;
+        return closest;
+      }, null);
+
+    const fallbackTutorialColumn = header.column + 1;
+    const searchEndColumn = Math.max(
+      fallbackTutorialColumn,
+      nextMonthColumn === null ? fallbackTutorialColumn : nextMonthColumn - 1,
+    );
+
+    const hwCenterColumn = findSubheaderColumn(rows, header.row + 1, dataStartRow, header.column, searchEndColumn, HW_CENTER_SUBHEADER);
+    const tutorialColumn = findSubheaderColumn(rows, header.row + 1, dataStartRow, header.column, searchEndColumn, TUTORIAL_SUBHEADER);
+
     return [{
-      month,
-      shortLabel: month.slice(0, 3).toUpperCase(),
-      hwCenterColumn: header.column,
-      tutorialColumn: header.column + 1,
+      month: header.month,
+      shortLabel: header.shortLabel,
+      hwCenterColumn: hwCenterColumn ?? header.column,
+      tutorialColumn: tutorialColumn ?? fallbackTutorialColumn,
     }];
   });
+}
+
+function findSubheaderColumn(
+  rows: string[][],
+  startRow: number,
+  endRow: number,
+  startColumn: number,
+  endColumn: number,
+  subheaderName: string,
+): number | null {
+  const normalizedSubheaderName = normalizeHeader(subheaderName);
+
+  for (let row = startRow; row < endRow; row++) {
+    for (let column = startColumn; column <= endColumn; column++) {
+      if (normalizeHeader(rows[row]?.[column]) === normalizedSubheaderName) {
+        return column;
+      }
+    }
+  }
+
+  return null;
 }
 
 function findHeader(rows: string[][], headerName: string): { row: number; column: number } | null {

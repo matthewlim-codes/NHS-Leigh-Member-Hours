@@ -113,7 +113,7 @@ export default function LoginPage() {
                         />
                       </FormControl>
                       <p className="text-[13px] text-muted-foreground mt-1">
-                        Usually your first and last name separated by a hyphen (e.g. Elvis-Presley)
+                        Use your first and last name separated by a hyphen (e.g. Matthew-Lim)
                       </p>
                       <FormMessage />
                     </FormItem>
@@ -136,6 +136,9 @@ export default function LoginPage() {
                         />
                       </FormControl>
                       <FormMessage />
+                      <p className="text-[13px] text-muted-foreground mt-1">
+                        First-time password: your Student ID
+                      </p>
                     </FormItem>
                   )}
                 />

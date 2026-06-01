@@ -9,9 +9,12 @@ const MEMBER_SHEET_TABS = ["11/12", "10"];
 // ----------------------------------------------------------------------------
 
 const NAME_HEADER = "name";
+const STUDENT_ID_HEADER = "student id";
 const HOURS_HEADER = "total hours";
+const HEADER_SCAN_ROW_COUNT = 5;
 
 export interface SheetMember {
+  studentId: string;
   displayName: string;
   hours: number;
 }
@@ -33,21 +36,22 @@ export async function getMemberFromSheet(username: string): Promise<SheetMember 
 
     if (rows.length < 2) continue;
 
-    const headers = rows[0].map((header) => normalizeHeader(header));
-    const nameColumn = headers.indexOf(NAME_HEADER);
-    const hoursColumn = headers.indexOf(HOURS_HEADER);
+    const columns = findMemberColumns(rows);
 
-    if (nameColumn === -1 || hoursColumn === -1) continue;
+    if (!columns) continue;
 
-    for (let i = 1; i < rows.length; i++) {
+    for (let i = columns.dataStartRow; i < rows.length; i++) {
       const row = rows[i];
-      if (!row || row.length <= nameColumn) continue;
+      if (!row || row.length <= columns.nameColumn || row.length <= columns.studentIdColumn) continue;
 
-      const cellName = (row[nameColumn] ?? "").trim();
+      const studentId = normalizeStudentId(row[columns.studentIdColumn]);
+      const cellName = (row[columns.nameColumn] ?? "").trim();
+      if (!studentId || !cellName) continue;
+
       if (normalizeNameForMatching(cellName) === normalizedUsername) {
-        const rawHours = row[hoursColumn] ?? "0";
+        const rawHours = row[columns.hoursColumn] ?? "0";
         const hours = parseHours(rawHours);
-        return { displayName: toDisplayName(cellName), hours };
+        return { studentId, displayName: toDisplayName(cellName), hours };
       }
     }
   }
@@ -61,21 +65,8 @@ export function generateUsername(fullName: string): string {
     .replace(/\s+/g, "-");
 }
 
-export function generateTempPassword(fullName: string): string {
-  const parts = toDisplayName(fullName).trim().split(/\s+/);
-  const firstName = parts[0] ?? "";
-  const lastName = parts[parts.length - 1] ?? "";
-
-  const firstLen = firstName.replace(/[^a-zA-Z]/g, "").length;
-  const lastLen = lastName.replace(/[^a-zA-Z]/g, "").length;
-
-  const toLetter = (n: number): string => {
-    if (n === 0) return "a";
-    const idx = ((n - 1) % 26) + 1;
-    return String.fromCharCode(96 + idx);
-  };
-
-  return `${firstLen}${lastLen}${toLetter(firstLen)}${toLetter(lastLen)}`;
+export function generateTempPassword(studentId: string): string {
+  return normalizeStudentId(studentId);
 }
 
 function quoteSheetName(sheetName: string): string {
@@ -84,6 +75,41 @@ function quoteSheetName(sheetName: string): string {
 
 function normalizeHeader(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function findMemberColumns(rows: string[][]): {
+  studentIdColumn: number;
+  nameColumn: number;
+  hoursColumn: number;
+  dataStartRow: number;
+} | null {
+  const studentIdHeader = findHeader(rows, STUDENT_ID_HEADER);
+  const nameHeader = findHeader(rows, NAME_HEADER);
+  const hoursHeader = findHeader(rows, HOURS_HEADER);
+
+  if (!studentIdHeader || !nameHeader || !hoursHeader) {
+    return null;
+  }
+
+  return {
+    studentIdColumn: studentIdHeader.column,
+    nameColumn: nameHeader.column,
+    hoursColumn: hoursHeader.column,
+    dataStartRow: Math.max(studentIdHeader.row, nameHeader.row, hoursHeader.row) + 1,
+  };
+}
+
+function findHeader(rows: string[][], headerName: string): { row: number; column: number } | null {
+  const rowsToScan = Math.min(rows.length, HEADER_SCAN_ROW_COUNT);
+
+  for (let row = 0; row < rowsToScan; row++) {
+    const column = rows[row].findIndex((cell) => normalizeHeader(cell) === headerName);
+    if (column !== -1) {
+      return { row, column };
+    }
+  }
+
+  return null;
 }
 
 function toDisplayName(fullName: string): string {
@@ -110,4 +136,8 @@ function normalizeNameForMatching(fullName: string): string {
 function parseHours(rawHours: string): number {
   const hours = Number.parseFloat(rawHours.replace(/,/g, ""));
   return Number.isFinite(hours) ? hours : 0;
+}
+
+function normalizeStudentId(studentId: string | undefined): string {
+  return (studentId ?? "").trim();
 }

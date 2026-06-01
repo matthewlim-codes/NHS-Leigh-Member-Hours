@@ -1,6 +1,6 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
-const SPREADSHEET_ID = "1BzguDC-eKmL8lGG1f9-Js4_5S9uBcUyNhXP5pPkz4D0";
+const SPREADSHEET_ID = "1NAfPUYygYC_AuIVHrguiGO_7sixenv3P2JREIawRKrk";
 
 export interface SheetMember {
   displayName: string;

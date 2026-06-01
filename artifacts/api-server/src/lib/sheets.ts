@@ -137,7 +137,7 @@ export function generateUsername(fullName: string): string {
     .replace(/\s+/g, "-");
 }
 
-export function generateTempPassword(studentId: string): string {
+export function getStudentIdTemporaryPassword(studentId: string): string {
   return normalizeStudentId(studentId);
 }
 

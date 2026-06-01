@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, membersTable } from "@workspace/db";
 import { LoginBody, ChangePasswordBody, LoginResponse, GetMeResponse, ChangePasswordResponse, LogoutResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
-import { getMemberFromSheet, generateTempPassword } from "../lib/sheets";
+import { getMemberFromSheet, getStudentIdTemporaryPassword } from "../lib/sheets";
 
 const router: IRouter = Router();
 
@@ -31,7 +31,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     }
 
     let passwordMatches = await bcrypt.compare(password, existingMember.passwordHash);
-    if (!passwordMatches && existingMember.mustChangePassword && password === generateTempPassword(sheetMember.studentId)) {
+    if (!passwordMatches && existingMember.mustChangePassword && password === getStudentIdTemporaryPassword(sheetMember.studentId)) {
       const passwordHash = await bcrypt.hash(password, 12);
       await db
         .update(membersTable)
@@ -66,7 +66,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const expectedTempPassword = generateTempPassword(sheetMember.studentId);
+  const expectedTempPassword = getStudentIdTemporaryPassword(sheetMember.studentId);
   if (password !== expectedTempPassword) {
     res.status(401).json({ error: "Invalid username or password" });
     return;

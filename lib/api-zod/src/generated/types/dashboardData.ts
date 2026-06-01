@@ -5,8 +5,21 @@
  * NHS (Leigh) Member Hour Tracker API
  * OpenAPI spec version: 0.1.0
  */
+import type { MonthlyHours } from './monthlyHours';
 
 export interface DashboardData {
   displayName: string;
-  hours: number;
+  grade: number;
+  infoFormComplete: boolean;
+  clubDuesPaid: boolean;
+  totalHours: number;
+  annualGoal: number;
+  annualRemaining: number;
+  semester1Hours: number;
+  semester1Goal: number;
+  semester1Remaining: number;
+  semester2Hours: number;
+  semester2Goal: number;
+  semester2Remaining: number;
+  monthlyHours: MonthlyHours[];
 }

@@ -118,7 +118,7 @@ export default function ChangePasswordPage() {
             {changePasswordMutation.isError && (
               <Alert variant="destructive" className="mb-6" data-testid="alert-change-password-error">
                 <AlertDescription>
-                  {changePasswordMutation.error?.error || "We couldn't update your password. Please check your current password and try again."}
+                  {changePasswordMutation.error?.data?.error || "We couldn't update your password. Please check your current password and try again."}
                 </AlertDescription>
               </Alert>
             )}

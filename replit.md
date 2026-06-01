@@ -10,6 +10,8 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-server run cleanup:stale-members:dry-run` — list DB accounts that are no longer in the current Google Sheet
+- `pnpm --filter @workspace/api-server run cleanup:stale-members` — delete DB accounts that are no longer in the current Google Sheet
 - Required env: `DATABASE_URL` — Postgres connection string
 - Required env: `SESSION_SECRET` — secret for express-session
 
@@ -30,21 +32,21 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `lib/api-spec/openapi.yaml` — OpenAPI contract (source of truth)
 - `lib/db/src/schema/members.ts` — members table schema
 - `artifacts/api-server/src/routes/auth.ts` — login, logout, me, change-password
-- `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data
+- `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data, goals, and remaining-hour calculations
 - `artifacts/api-server/src/lib/sheets.ts` — Google Sheets helper + username/password generation
 - `artifacts/member-portal/src/pages/` — login, change-password, dashboard pages
 
 ## Architecture decisions
 
-- **Auto-provisioning accounts**: Members are not pre-seeded. On first login, the app verifies the temp password against the computed value for that member's name from Google Sheets, then creates the account in the DB with `mustChangePassword=true`.
+- **Auto-provisioning accounts**: Members are not pre-seeded. On first login, the app verifies the temp password against the member's `STUDENT ID` from Google Sheets, then creates the account in the DB with `mustChangePassword=true`.
 - **Google Sheets as source of truth**: Hours and display names are always fetched fresh from the sheet, never cached in the DB.
 - **Session storage in PostgreSQL**: Uses connect-pg-simple so sessions survive server restarts.
-- **Username format**: `First-Last` (spaces replaced by hyphens, normalised).
-- **Temp password format**: `{firstNameLen}{lastNameLen}{letter(firstLen)}{letter(lastLen)}` e.g. "Elvis Presley" → "57eg".
+- **Username format**: `First-Last` (for sheet names stored as `Last, First`, e.g. `Lim, Matthew` → `Matthew-Lim`).
+- **Temp password format**: the member's `STUDENT ID` value from the sheet.
 
 ## Product
 
-Members visit the portal, enter their username (e.g. `Elvis-Presley`) and their temporary password. On first login they must set a new password. They then see their name and total volunteer hours from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
+Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their Student ID as their temporary password. On first login they must set a new password. They then see their name, form/dues status, annual and semester hour progress, and a month-by-month HW Center/Tutorial breakdown from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
 
 ## User preferences
 
@@ -54,7 +56,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Always run `pnpm run typecheck:libs` before `pnpm --filter @workspace/api-server run typecheck` after changing `lib/db` schema — the composite lib must be rebuilt first.
 - The Google Sheets integration uses Replit's connector proxy (`@replit/connectors-sdk`). If it returns errors, the connection may need to be re-authorized via the integrations panel.
-- The spreadsheet ID is hardcoded in `artifacts/api-server/src/lib/sheets.ts`. Sheet must have a tab named `Sheet1` with column A = Name, column B = Hours (header in row 1, data from row 2).
+- The spreadsheet ID and member data tabs are configured in `artifacts/api-server/src/lib/sheets.ts`. The current sheet reads the `11/12` and `10` tabs, finds columns by header across the first few header rows, and expects `STUDENT ID`, `NAME`, and `TOTAL HOURS` columns.
+- Hour goals are calculated in `artifacts/api-server/src/routes/dashboard.ts`: grade 10 requires 7 annual hours; grades 11/12 require 20 annual hours, split as 9 semester 1 hours and 11 semester 2 hours.
 
 ## Pointers
 

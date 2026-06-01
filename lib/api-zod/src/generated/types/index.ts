@@ -11,5 +11,6 @@ export * from './dashboardData';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './loginInput';
+export * from './monthlyHours';
 export * from './passwordChangeInput';
 export * from './successResponse';

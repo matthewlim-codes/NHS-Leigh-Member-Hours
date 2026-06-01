@@ -23,16 +23,25 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     .where(eq(membersTable.username, username));
 
   if (existingMember) {
-    const passwordMatches = await bcrypt.compare(password, existingMember.passwordHash);
-    if (!passwordMatches) {
-      res.status(401).json({ error: "Invalid username or password" });
-      return;
-    }
-
     // Block login if member no longer in sheet
     const sheetMember = await getMemberFromSheet(username);
     if (!sheetMember) {
       res.status(401).json({ error: "Your account could not be found in the member list. Please contact your administrator." });
+      return;
+    }
+
+    let passwordMatches = await bcrypt.compare(password, existingMember.passwordHash);
+    if (!passwordMatches && existingMember.mustChangePassword && password === generateTempPassword(sheetMember.studentId)) {
+      const passwordHash = await bcrypt.hash(password, 12);
+      await db
+        .update(membersTable)
+        .set({ passwordHash })
+        .where(eq(membersTable.id, existingMember.id));
+      passwordMatches = true;
+    }
+
+    if (!passwordMatches) {
+      res.status(401).json({ error: "Invalid username or password" });
       return;
     }
 
@@ -57,7 +66,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const expectedTempPassword = generateTempPassword(sheetMember.displayName);
+  const expectedTempPassword = generateTempPassword(sheetMember.studentId);
   if (password !== expectedTempPassword) {
     res.status(401).json({ error: "Invalid username or password" });
     return;

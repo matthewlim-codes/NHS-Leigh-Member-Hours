@@ -194,9 +194,10 @@ function findMonthColumns(rows: string[][]): MonthColumns[] {
 
 function findHeader(rows: string[][], headerName: string): { row: number; column: number } | null {
   const rowsToScan = Math.min(rows.length, HEADER_SCAN_ROW_COUNT);
+  const normalizedHeaderName = normalizeHeader(headerName);
 
   for (let row = 0; row < rowsToScan; row++) {
-    const column = rows[row].findIndex((cell) => normalizeHeader(cell) === headerName);
+    const column = rows[row].findIndex((cell) => normalizeHeader(cell) === normalizedHeaderName);
     if (column !== -1) {
       return { row, column };
     }

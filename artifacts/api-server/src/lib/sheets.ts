@@ -1,6 +1,12 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
+// ─── SPREADSHEET CONFIG ───────────────────────────────────────────────────────
+// To connect a different Google Sheet, update SPREADSHEET_ID and SHEET_TAB below.
+// SPREADSHEET_ID: the long ID in the spreadsheet URL between /d/ and /edit
+// SHEET_TAB:      the exact name of the tab containing member data
 const SPREADSHEET_ID = "1NAfPUYygYC_AuIVHrguiGO_7sixenv3P2JREIawRKrk";
+const SHEET_TAB = "Sheet1";
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface SheetMember {
   displayName: string;
@@ -12,7 +18,7 @@ export async function getMemberFromSheet(username: string): Promise<SheetMember 
 
   const response = await connectors.proxy(
     "google-sheet",
-    `/v4/spreadsheets/${SPREADSHEET_ID}/values/Sheet1`,
+    `/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`,
     { method: "GET" }
   );
 

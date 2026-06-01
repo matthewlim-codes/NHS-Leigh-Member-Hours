@@ -187,12 +187,69 @@ components:
 
     DashboardData:
       type: object
-      required: [displayName, hours]
+      required:
+        - displayName
+        - grade
+        - infoFormComplete
+        - clubDuesPaid
+        - totalHours
+        - annualGoal
+        - annualRemaining
+        - semester1Hours
+        - semester1Goal
+        - semester1Remaining
+        - semester2Hours
+        - semester2Goal
+        - semester2Remaining
+        - monthlyHours
       properties:
         displayName:
           type: string
-        hours:
+        grade:
+          type: integer
+        infoFormComplete:
+          type: boolean
+        clubDuesPaid:
+          type: boolean
+        totalHours:
           type: number
+        annualGoal:
+          type: number
+        annualRemaining:
+          type: number
+        semester1Hours:
+          type: number
+        semester1Goal:
+          type: number
+        semester1Remaining:
+          type: number
+        semester2Hours:
+          type: number
+        semester2Goal:
+          type: number
+        semester2Remaining:
+          type: number
+        monthlyHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyHours"
+
+    MonthlyHours:
+      type: object
+      required: [month, shortLabel, hwCenter, tutorial, total, hasData]
+      properties:
+        month:
+          type: string
+        shortLabel:
+          type: string
+        hwCenter:
+          type: string
+        tutorial:
+          type: string
+        total:
+          type: number
+        hasData:
+          type: boolean
 
     SuccessResponse:
       type: object

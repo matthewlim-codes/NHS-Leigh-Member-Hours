@@ -32,7 +32,7 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `lib/api-spec/openapi.yaml` — OpenAPI contract (source of truth)
 - `lib/db/src/schema/members.ts` — members table schema
 - `artifacts/api-server/src/routes/auth.ts` — login, logout, me, change-password
-- `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data
+- `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data, goals, and remaining-hour calculations
 - `artifacts/api-server/src/lib/sheets.ts` — Google Sheets helper + username/password generation
 - `artifacts/member-portal/src/pages/` — login, change-password, dashboard pages
 
@@ -46,7 +46,7 @@ A private member portal for an NHS-style community club. Members log in to see t
 
 ## Product
 
-Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their Student ID as their temporary password. On first login they must set a new password. They then see their name and total volunteer hours from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
+Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their Student ID as their temporary password. On first login they must set a new password. They then see their name, form/dues status, annual and semester hour progress, and a month-by-month HW Center/Tutorial breakdown from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
 
 ## User preferences
 
@@ -57,6 +57,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 - Always run `pnpm run typecheck:libs` before `pnpm --filter @workspace/api-server run typecheck` after changing `lib/db` schema — the composite lib must be rebuilt first.
 - The Google Sheets integration uses Replit's connector proxy (`@replit/connectors-sdk`). If it returns errors, the connection may need to be re-authorized via the integrations panel.
 - The spreadsheet ID and member data tabs are configured in `artifacts/api-server/src/lib/sheets.ts`. The current sheet reads the `11/12` and `10` tabs, finds columns by header across the first few header rows, and expects `STUDENT ID`, `NAME`, and `TOTAL HOURS` columns.
+- Hour goals are calculated in `artifacts/api-server/src/routes/dashboard.ts`: grade 10 requires 7 annual hours; grades 11/12 require 20 annual hours, split as 9 semester 1 hours and 11 semester 2 hours.
 
 ## Pointers
 

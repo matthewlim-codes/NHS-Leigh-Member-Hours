@@ -89,7 +89,7 @@ export default function LoginPage() {
             {loginMutation.isError && (
               <Alert variant="destructive" className="mb-6" data-testid="alert-login-error">
                 <AlertDescription>
-                  {loginMutation.error?.error || "We couldn't sign you in. Please check your details and try again."}
+                  {loginMutation.error?.data?.error || "We couldn't sign you in. Please check your details and try again."}
                 </AlertDescription>
               </Alert>
             )}

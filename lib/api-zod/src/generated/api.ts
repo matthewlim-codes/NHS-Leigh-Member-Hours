@@ -79,7 +79,26 @@ export const ChangePasswordResponse = zod.object({
  */
 export const GetDashboardResponse = zod.object({
   "displayName": zod.string(),
-  "hours": zod.number()
+  "grade": zod.number(),
+  "infoFormComplete": zod.boolean(),
+  "clubDuesPaid": zod.boolean(),
+  "totalHours": zod.number(),
+  "annualGoal": zod.number(),
+  "annualRemaining": zod.number(),
+  "semester1Hours": zod.number(),
+  "semester1Goal": zod.number(),
+  "semester1Remaining": zod.number(),
+  "semester2Hours": zod.number(),
+  "semester2Goal": zod.number(),
+  "semester2Remaining": zod.number(),
+  "monthlyHours": zod.array(zod.object({
+  "month": zod.string(),
+  "shortLabel": zod.string(),
+  "hwCenter": zod.string(),
+  "tutorial": zod.string(),
+  "total": zod.number(),
+  "hasData": zod.boolean()
+}))
 })
 
 

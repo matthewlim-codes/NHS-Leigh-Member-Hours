@@ -29,9 +29,30 @@ export interface AuthUser {
   mustChangePassword: boolean;
 }
 
+export interface MonthlyHours {
+  month: string;
+  shortLabel: string;
+  hwCenter: string;
+  tutorial: string;
+  total: number;
+  hasData: boolean;
+}
+
 export interface DashboardData {
   displayName: string;
-  hours: number;
+  grade: number;
+  infoFormComplete: boolean;
+  clubDuesPaid: boolean;
+  totalHours: number;
+  annualGoal: number;
+  annualRemaining: number;
+  semester1Hours: number;
+  semester1Goal: number;
+  semester1Remaining: number;
+  semester2Hours: number;
+  semester2Goal: number;
+  semester2Remaining: number;
+  monthlyHours: MonthlyHours[];
 }
 
 export interface SuccessResponse {

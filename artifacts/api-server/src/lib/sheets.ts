@@ -57,11 +57,11 @@ export interface SheetMonthHours {
 interface MemberColumns {
   studentIdColumn: number;
   nameColumn: number;
-  gradeColumn: number;
-  infoFormColumn: number;
-  clubDuesColumn: number;
-  hoursColumn: number;
-  semester1Column: number;
+  gradeColumn: number | null;
+  infoFormColumn: number | null;
+  clubDuesColumn: number | null;
+  hoursColumn: number | null;
+  semester1Column: number | null;
   monthColumns: MonthColumns[];
   dataStartRow: number;
 }
@@ -109,17 +109,17 @@ export async function listMembersFromSheet(): Promise<SheetMember[]> {
       const cellName = (row[columns.nameColumn] ?? "").trim();
       if (!studentId || !cellName) continue;
 
-      const hours = parseHours(row[columns.hoursColumn] ?? "0");
-      const semester1Hours = parseHours(row[columns.semester1Column] ?? "0");
+      const hours = parseHours(getCell(row, columns.hoursColumn));
+      const semester1Hours = parseHours(getCell(row, columns.semester1Column));
       const displayName = toDisplayName(cellName);
 
       members.push({
         studentId,
         username: generateUsername(displayName),
         displayName,
-        grade: parseGrade(row[columns.gradeColumn]),
-        infoFormComplete: parseCompletion(row[columns.infoFormColumn]),
-        clubDuesPaid: parseCompletion(row[columns.clubDuesColumn]),
+        grade: parseGrade(getCell(row, columns.gradeColumn)),
+        infoFormComplete: parseCompletion(getCell(row, columns.infoFormColumn)),
+        clubDuesPaid: parseCompletion(getCell(row, columns.clubDuesColumn)),
         hours,
         semester1Hours,
         semester2Hours: Math.max(0, hours - semester1Hours),
@@ -159,20 +159,20 @@ function findMemberColumns(rows: string[][]): MemberColumns | null {
   const semester1Header = findHeader(rows, SEMESTER_1_HEADER);
   const monthColumns = findMonthColumns(rows);
 
-  if (!studentIdHeader || !nameHeader || !gradeHeader || !infoFormHeader || !clubDuesHeader || !hoursHeader || !semester1Header) {
+  if (!studentIdHeader || !nameHeader) {
     return null;
   }
 
   return {
     studentIdColumn: studentIdHeader.column,
     nameColumn: nameHeader.column,
-    gradeColumn: gradeHeader.column,
-    infoFormColumn: infoFormHeader.column,
-    clubDuesColumn: clubDuesHeader.column,
-    hoursColumn: hoursHeader.column,
-    semester1Column: semester1Header.column,
+    gradeColumn: gradeHeader?.column ?? null,
+    infoFormColumn: infoFormHeader?.column ?? null,
+    clubDuesColumn: clubDuesHeader?.column ?? null,
+    hoursColumn: hoursHeader?.column ?? null,
+    semester1Column: semester1Header?.column ?? null,
     monthColumns,
-    dataStartRow: Math.max(studentIdHeader.row, nameHeader.row, gradeHeader.row) + 1,
+    dataStartRow: Math.max(studentIdHeader.row, nameHeader.row) + 1,
   };
 }
 
@@ -229,6 +229,11 @@ function normalizeNameForMatching(fullName: string): string {
 function parseHours(rawHours: string): number {
   const hours = Number.parseFloat(rawHours.replace(/,/g, ""));
   return Number.isFinite(hours) ? hours : 0;
+}
+
+function getCell(row: string[], column: number | null): string {
+  if (column === null) return "";
+  return row[column] ?? "";
 }
 
 function normalizeStudentId(studentId: string | undefined): string {

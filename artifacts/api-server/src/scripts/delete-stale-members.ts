@@ -1,10 +1,16 @@
 import { eq } from "drizzle-orm";
-import { db, membersTable, pool } from "@workspace/db";
 import { listMembersFromSheet } from "../lib/sheets";
 
 const shouldDelete = process.argv.includes("--delete");
+let closePool: (() => Promise<void>) | undefined;
 
 try {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not set. Run this command in the Replit environment that has the app database secret.");
+  }
+
+  const { db, membersTable, pool } = await import("@workspace/db");
+  closePool = () => pool.end();
   const sheetMembers = await listMembersFromSheet();
   const currentUsernames = new Set(sheetMembers.map((member) => member.username));
 
@@ -40,6 +46,9 @@ try {
     }
     console.log(`Deleted ${staleMembers.length} stale account(s).`);
   }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
 } finally {
-  await pool.end();
+  await closePool?.();
 }

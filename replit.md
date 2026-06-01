@@ -10,6 +10,8 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-server run cleanup:stale-members:dry-run` — list DB accounts that are no longer in the current Google Sheet
+- `pnpm --filter @workspace/api-server run cleanup:stale-members` — delete DB accounts that are no longer in the current Google Sheet
 - Required env: `DATABASE_URL` — Postgres connection string
 - Required env: `SESSION_SECRET` — secret for express-session
 

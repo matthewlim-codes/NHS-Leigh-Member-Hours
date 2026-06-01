@@ -15,13 +15,21 @@ const HEADER_SCAN_ROW_COUNT = 5;
 
 export interface SheetMember {
   studentId: string;
+  username: string;
   displayName: string;
   hours: number;
 }
 
 export async function getMemberFromSheet(username: string): Promise<SheetMember | null> {
-  const connectors = new ReplitConnectors();
+  const members = await listMembersFromSheet();
   const normalizedUsername = normalizeNameForMatching(username.replace(/-/g, " "));
+
+  return members.find((member) => normalizeNameForMatching(member.username.replace(/-/g, " ")) === normalizedUsername) ?? null;
+}
+
+export async function listMembersFromSheet(): Promise<SheetMember[]> {
+  const connectors = new ReplitConnectors();
+  const members: SheetMember[] = [];
 
   for (const sheetTab of MEMBER_SHEET_TABS) {
     const range = encodeURIComponent(`${quoteSheetName(sheetTab)}!A:ZZ`);
@@ -48,15 +56,19 @@ export async function getMemberFromSheet(username: string): Promise<SheetMember 
       const cellName = (row[columns.nameColumn] ?? "").trim();
       if (!studentId || !cellName) continue;
 
-      if (normalizeNameForMatching(cellName) === normalizedUsername) {
-        const rawHours = row[columns.hoursColumn] ?? "0";
-        const hours = parseHours(rawHours);
-        return { studentId, displayName: toDisplayName(cellName), hours };
-      }
+      const rawHours = row[columns.hoursColumn] ?? "0";
+      const hours = parseHours(rawHours);
+      const displayName = toDisplayName(cellName);
+      members.push({
+        studentId,
+        username: generateUsername(displayName),
+        displayName,
+        hours,
+      });
     }
   }
 
-  return null;
+  return members;
 }
 
 export function generateUsername(fullName: string): string {

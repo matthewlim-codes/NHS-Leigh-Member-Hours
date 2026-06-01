@@ -105,7 +105,7 @@ export default function LoginPage() {
                         />
                       </FormControl>
                       <p className="text-[13px] text-muted-foreground mt-1">
-                        Use your first and last name separated by a hyphen (e.g. Matthew-Lim)
+                        Use your first and last name separated by a hyphen (e.g. Alexander-Hamilton)
                       </p>
                       <FormMessage />
                     </FormItem>

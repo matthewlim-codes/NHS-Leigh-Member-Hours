@@ -34,6 +34,18 @@ const MONTHS = [
   "December",
 ] as const;
 
+const SHEET_HOUR_SECTION_ORDER = [
+  "October",
+  "November",
+  "December",
+  "Semester 1 Make-Up",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+] as const;
+
 export interface SheetMember {
   studentId: string;
   username: string;
@@ -166,6 +178,8 @@ function findMemberColumns(rows: string[][]): MemberColumns | null {
 
   const dataStartRow = Math.max(studentIdHeader.row, nameHeader.row) + 1;
 
+  const columnBeforeMonthlyHours = semester1Header?.column ?? (hoursHeader ? hoursHeader.column + 1 : nameHeader.column + 5);
+
   return {
     studentIdColumn: studentIdHeader.column,
     nameColumn: nameHeader.column,
@@ -174,12 +188,13 @@ function findMemberColumns(rows: string[][]): MemberColumns | null {
     clubDuesColumn: clubDuesHeader?.column ?? null,
     hoursColumn: hoursHeader?.column ?? null,
     semester1Column: semester1Header?.column ?? null,
-    monthColumns: findMonthColumns(rows, dataStartRow),
+    monthColumns: findMonthColumns(rows, dataStartRow, columnBeforeMonthlyHours),
     dataStartRow,
   };
 }
 
-function findMonthColumns(rows: string[][], dataStartRow: number): MonthColumns[] {
+function findMonthColumns(rows: string[][], dataStartRow: number, columnBeforeMonthlyHours: number | null): MonthColumns[] {
+  const columnsByMonth = new Map<string, MonthColumns>();
   const monthHeaders = MONTHS.flatMap((month) => {
     const header = findHeader(rows, month);
     if (!header) {
@@ -189,7 +204,7 @@ function findMonthColumns(rows: string[][], dataStartRow: number): MonthColumns[
     return [{ month, shortLabel: month.slice(0, 3).toUpperCase(), ...header }];
   });
 
-  return monthHeaders.flatMap((header) => {
+  monthHeaders.forEach((header) => {
     const nextMonthColumn = monthHeaders
       .filter((monthHeader) => monthHeader.column > header.column)
       .reduce<number | null>((closest, monthHeader) => {
@@ -206,13 +221,39 @@ function findMonthColumns(rows: string[][], dataStartRow: number): MonthColumns[
     const hwCenterColumn = findSubheaderColumn(rows, header.row + 1, dataStartRow, header.column, searchEndColumn, HW_CENTER_SUBHEADER);
     const tutorialColumn = findSubheaderColumn(rows, header.row + 1, dataStartRow, header.column, searchEndColumn, TUTORIAL_SUBHEADER);
 
-    return [{
-      month: header.month,
-      shortLabel: header.shortLabel,
-      hwCenterColumn: hwCenterColumn ?? header.column,
-      tutorialColumn: tutorialColumn ?? fallbackTutorialColumn,
-    }];
+    if (hwCenterColumn !== null && tutorialColumn !== null) {
+      columnsByMonth.set(header.month, {
+        month: header.month,
+        shortLabel: header.shortLabel,
+        hwCenterColumn,
+        tutorialColumn,
+      });
+    }
   });
+
+  if (columnBeforeMonthlyHours !== null) {
+    const firstMonthlyColumn = columnBeforeMonthlyHours + 1;
+
+    SHEET_HOUR_SECTION_ORDER.forEach((sectionName, index) => {
+      if (!isDashboardMonth(sectionName)) {
+        return;
+      }
+
+      const hwCenterColumn = firstMonthlyColumn + index * 2;
+      columnsByMonth.set(sectionName, {
+        month: sectionName,
+        shortLabel: sectionName.slice(0, 3).toUpperCase(),
+        hwCenterColumn,
+        tutorialColumn: hwCenterColumn + 1,
+      });
+    });
+  }
+
+  return MONTHS.flatMap((month) => columnsByMonth.get(month) ?? []);
+}
+
+function isDashboardMonth(sectionName: string): sectionName is typeof MONTHS[number] {
+  return (MONTHS as readonly string[]).includes(sectionName);
 }
 
 function findSubheaderColumn(

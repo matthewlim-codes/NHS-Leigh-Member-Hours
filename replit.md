@@ -54,7 +54,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Always run `pnpm run typecheck:libs` before `pnpm --filter @workspace/api-server run typecheck` after changing `lib/db` schema — the composite lib must be rebuilt first.
 - The Google Sheets integration uses Replit's connector proxy (`@replit/connectors-sdk`). If it returns errors, the connection may need to be re-authorized via the integrations panel.
-- The spreadsheet ID is hardcoded in `artifacts/api-server/src/lib/sheets.ts`. Sheet must have a tab named `Sheet1` with column A = Name, column B = Hours (header in row 1, data from row 2).
+- The spreadsheet ID and member data tabs are configured in `artifacts/api-server/src/lib/sheets.ts`. The current sheet reads the `11/12` and `10` tabs, finds columns by header, and expects `NAME` plus `TOTAL HOURS` columns.
 
 ## Pointers
 

@@ -31,22 +31,22 @@ A private member portal for an NHS-style community club. Members log in to see t
 
 - `lib/api-spec/openapi.yaml` — OpenAPI contract (source of truth)
 - `lib/db/src/schema/members.ts` — members table schema
-- `artifacts/api-server/src/routes/auth.ts` — login, logout, me, change-password
+- `artifacts/api-server/src/routes/auth.ts` — login, logout, me
 - `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data, goals, and remaining-hour calculations
 - `artifacts/api-server/src/lib/sheets.ts` — Google Sheets helper + username/password generation
-- `artifacts/member-portal/src/pages/` — login, change-password, dashboard pages
+- `artifacts/member-portal/src/pages/` — login and dashboard pages
 
 ## Architecture decisions
 
-- **Auto-provisioning accounts**: Members are not pre-seeded. On first login, the app verifies the temp password against the member's `STUDENT ID` from Google Sheets, then creates the account in the DB with `mustChangePassword=true`.
+- **Auto-provisioning accounts**: Members are not pre-seeded. On login, the app verifies the password against the member's current `STUDENT ID` from Google Sheets, then creates the account in the DB if it does not already exist.
 - **Google Sheets as source of truth**: Hours and display names are always fetched fresh from the sheet, never cached in the DB.
 - **Session storage in PostgreSQL**: Uses connect-pg-simple so sessions survive server restarts.
 - **Username format**: `First-Last` (for sheet names stored as `Last, First`, e.g. `Lim, Matthew` → `Matthew-Lim`).
-- **Temp password format**: the member's `STUDENT ID` value from the sheet.
+- **Password format**: the member's `STUDENT ID` value from the sheet. Members do not change this password in the app.
 
 ## Product
 
-Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their Student ID as their temporary password. On first login they must set a new password. They then see their name, form/dues status, annual and semester hour progress, and a month-by-month HW Center/Tutorial breakdown from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
+Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their Student ID as their password. They then see their name, form/dues status, annual and semester hour progress, and a month-by-month HW Center/Tutorial breakdown from the Google Sheet. The sheet owner updates hours in Google Sheets and members see the latest data on their next visit.
 
 ## User preferences
 

@@ -31,11 +31,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isSuccess && user) {
-      if (user.mustChangePassword) {
-        setLocation("/change-password");
-      } else {
-        setLocation("/dashboard");
-      }
+      setLocation("/dashboard");
     }
   }, [isSuccess, user, setLocation]);
 
@@ -55,11 +51,7 @@ export default function LoginPage() {
       {
         onSuccess: (data) => {
           queryClient.setQueryData(getGetMeQueryKey(), data);
-          if (data.mustChangePassword) {
-            setLocation("/change-password");
-          } else {
-            setLocation("/dashboard");
-          }
+          setLocation("/dashboard");
         },
       }
     );

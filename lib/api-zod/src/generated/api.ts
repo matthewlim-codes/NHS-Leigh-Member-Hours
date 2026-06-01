@@ -31,8 +31,7 @@ export const LoginBody = zod.object({
 
 export const LoginResponse = zod.object({
   "id": zod.number(),
-  "username": zod.string(),
-  "mustChangePassword": zod.boolean()
+  "username": zod.string()
 })
 
 
@@ -49,28 +48,7 @@ export const LogoutResponse = zod.object({
  */
 export const GetMeResponse = zod.object({
   "id": zod.number(),
-  "username": zod.string(),
-  "mustChangePassword": zod.boolean()
-})
-
-
-/**
- * @summary Change the current user's password
- */
-
-export const changePasswordBodyNewPasswordMin = 8;
-
-
-
-export const ChangePasswordBody = zod.object({
-  "currentPassword": zod.string().min(1),
-  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
-})
-
-export const ChangePasswordResponse = zod.object({
-  "id": zod.number(),
-  "username": zod.string(),
-  "mustChangePassword": zod.boolean()
+  "username": zod.string()
 })
 
 

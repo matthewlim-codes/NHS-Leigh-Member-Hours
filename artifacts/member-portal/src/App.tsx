@@ -7,7 +7,6 @@ import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 
 import LoginPage from "@/pages/login";
-import ChangePasswordPage from "@/pages/change-password";
 import DashboardPage from "@/pages/dashboard";
 
 const queryClient = new QueryClient();
@@ -31,11 +30,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    // If logged in
     if (isSuccess && user) {
-      if (user.mustChangePassword && location !== "/change-password") {
-        setLocation("/change-password");
-      } else if (!user.mustChangePassword && (location === "/login" || location === "/" || location === "/change-password")) {
+      if (location === "/login" || location === "/") {
         setLocation("/dashboard");
       }
     }
@@ -56,7 +52,6 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
-      <Route path="/change-password" component={ChangePasswordPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/" component={() => null} />
       <Route component={NotFound} />

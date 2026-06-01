@@ -16,17 +16,9 @@ export interface LoginInput {
   password: string;
 }
 
-export interface PasswordChangeInput {
-  /** @minLength 1 */
-  currentPassword: string;
-  /** @minLength 8 */
-  newPassword: string;
-}
-
 export interface AuthUser {
   id: number;
   username: string;
-  mustChangePassword: boolean;
 }
 
 export interface MonthlyHours {

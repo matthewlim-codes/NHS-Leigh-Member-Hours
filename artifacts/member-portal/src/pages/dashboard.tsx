@@ -23,15 +23,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isAuthError) {
       setLocation("/login");
-    } else if (isAuthSuccess && user?.mustChangePassword) {
-      setLocation("/change-password");
     }
-  }, [isAuthError, isAuthSuccess, user, setLocation]);
+  }, [isAuthError, setLocation]);
 
   const { data: dashboard, isError: isDashboardError, isLoading: isDashboardLoading, error: dashboardError } = useGetDashboard({
     query: {
       queryKey: getGetDashboardQueryKey(),
-      enabled: isAuthSuccess && user && !user.mustChangePassword,
+      enabled: isAuthSuccess && Boolean(user),
       retry: false
     }
   });
@@ -66,7 +64,7 @@ export default function DashboardPage() {
   const annualProgress = dashboard ? getProgressPercent(dashboard.totalHours, dashboard.annualGoal) : 0;
   const isGrade10 = dashboard?.grade === 10;
 
-  if (isAuthLoading || (isAuthSuccess && !user?.mustChangePassword && isDashboardLoading)) {
+  if (isAuthLoading || (isAuthSuccess && isDashboardLoading)) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading your dashboard...</div>
@@ -75,7 +73,7 @@ export default function DashboardPage() {
   }
 
   // Prevent flash of content while redirecting
-  if (!user || user.mustChangePassword) return null;
+  if (!user) return null;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">

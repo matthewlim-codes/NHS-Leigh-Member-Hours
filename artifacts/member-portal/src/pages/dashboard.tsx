@@ -80,7 +80,7 @@ export default function DashboardPage() {
       <header className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="font-bold text-lg text-foreground flex items-center gap-2">
-            NHS (Leigh)
+            Leigh NHS
           </h1>
           <Button 
             variant="ghost" 
@@ -153,37 +153,6 @@ export default function DashboardPage() {
                     </div>
                   </CardContent>
                 </Card>
-
-                <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatusCard
-                    icon={<ClipboardList className="w-5 h-5" />}
-                    label="Info Form"
-                    complete={dashboard.infoFormComplete}
-                    completeText="Complete"
-                    incompleteText="Missing"
-                  />
-                  <StatusCard
-                    icon={<CircleDollarSign className="w-5 h-5" />}
-                    label="Club Dues"
-                    complete={dashboard.clubDuesPaid}
-                    completeText="Paid"
-                    incompleteText="Unpaid"
-                  />
-                  <ProgressCard
-                    label="Annual Hours"
-                    hours={dashboard.totalHours}
-                    goal={dashboard.annualGoal}
-                    remaining={dashboard.annualRemaining}
-                  />
-                  {!isGrade10 && (
-                    <ProgressCard
-                      label="Semester 2"
-                      hours={dashboard.semester2Hours}
-                      goal={dashboard.semester2Goal}
-                      remaining={dashboard.semester2Remaining}
-                    />
-                  )}
-                </section>
 
                 {!isGrade10 && (
                   <section className="grid gap-3 md:grid-cols-2">
@@ -258,9 +227,34 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
 
-                <div className="text-center bg-secondary/50 rounded-xl p-5 w-full text-secondary-foreground border border-secondary">
-                  <p className="text-sm font-medium" data-testid="text-thank-you">
-                    Sheet updates appear here the next time you open or refresh your dashboard.
+                <Card className="border-card-border bg-card">
+                  <CardContent className="p-4 sm:p-5">
+                    <div className="mx-auto grid max-w-2xl gap-3 sm:grid-cols-2">
+                      <StatusCard
+                        icon={<ClipboardList className="w-5 h-5" />}
+                        label="Info Form"
+                        complete={dashboard.infoFormComplete}
+                        completeText="Complete"
+                        incompleteText="Missing"
+                      />
+                      <StatusCard
+                        icon={<CircleDollarSign className="w-5 h-5" />}
+                        label="Club Dues"
+                        complete={dashboard.clubDuesPaid}
+                        completeText="Paid"
+                        incompleteText="Unpaid"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="text-center bg-card rounded-xl p-5 w-full text-muted-foreground border border-card-border">
+                  <p className="text-sm font-medium" data-testid="text-help-footer">
+                    Need help or have questions? Contact{" "}
+                    <a className="text-primary underline-offset-4 hover:underline" href="mailto:562022@my.cuhsd.org">
+                      562022@my.cuhsd.org
+                    </a>
+                    .
                   </p>
                 </div>
               </>

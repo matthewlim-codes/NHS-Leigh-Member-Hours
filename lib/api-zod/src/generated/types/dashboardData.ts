@@ -22,5 +22,5 @@ export interface DashboardData {
   semester2Goal: number;
   semester2Remaining: number;
   monthlyHours: MonthlyHours[];
-  lastUpdatedAt: Date;
+  lastUpdatedAt: Date | null;
 }

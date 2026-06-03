@@ -63,7 +63,7 @@ export default function LoginPage() {
           <img
             src={`${import.meta.env.BASE_URL}nhs-logo.png`}
             alt="National Honor Society"
-            className="mb-4 h-32 w-auto"
+            className="mb-4 h-24 w-auto"
           />
           <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="heading-login">
             Leigh NHS Member Portal

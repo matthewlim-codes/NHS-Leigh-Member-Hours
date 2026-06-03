@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { ensureMemberTrackingColumns } from "./lib/member-schema";
 import { pool } from "@workspace/db";
 
 const PgSession = connectPgSimple(session);
@@ -52,6 +53,15 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(async (_req, _res, next) => {
+  try {
+    await ensureMemberTrackingColumns();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required");

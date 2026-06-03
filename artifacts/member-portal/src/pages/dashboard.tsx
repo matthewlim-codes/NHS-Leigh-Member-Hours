@@ -250,11 +250,7 @@ export default function DashboardPage() {
 
                 <div className="text-center bg-card rounded-xl p-5 w-full text-muted-foreground border border-card-border">
                   <p className="text-sm font-medium" data-testid="text-help-footer">
-                    Need help or have questions? Contact{" "}
-                    <a className="text-primary underline-offset-4 hover:underline" href="mailto:562022@my.cuhsd.org">
-                      562022@my.cuhsd.org
-                    </a>
-                    .
+                    Contact NHS officers for questions about your hours
                   </p>
                 </div>
               </>

@@ -61,7 +61,7 @@ export default function LoginPage() {
       <div className="w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8 text-center">
           <img
-            src={`${import.meta.env.BASE_URL}nhs-logo.svg`}
+            src={`${import.meta.env.BASE_URL}nhs-logo.png`}
             alt="National Honor Society"
             className="mb-4 h-32 w-auto"
           />

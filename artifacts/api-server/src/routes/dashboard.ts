@@ -49,6 +49,7 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     semester2Goal: getSemester2Goal(sheetMember.grade),
     semester2Remaining: getRemaining(sheetMember.semester2Hours, getSemester2Goal(sheetMember.grade)),
     monthlyHours: sheetMember.monthlyHours,
+    lastUpdatedAt: new Date().toISOString(),
   }));
 });
 

@@ -108,6 +108,14 @@ export default function LoginPage() {
                       <p className="text-[13px] text-muted-foreground mt-1">
                         Use your first and last name separated by a hyphen (e.g. Alexander-Hamilton)
                       </p>
+                      <details className="group mt-1 text-[13px] text-muted-foreground">
+                        <summary className="cursor-pointer font-medium text-primary underline-offset-4 hover:underline">
+                          Exceptions
+                        </summary>
+                        <p className="mt-1">
+                          If you have two last names, format it like First-Last 2ndLast.
+                        </p>
+                      </details>
                       <FormMessage />
                     </FormItem>
                   )}

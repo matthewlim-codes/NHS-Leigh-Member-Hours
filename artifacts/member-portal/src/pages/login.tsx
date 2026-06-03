@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Users } from "lucide-react";
 import { useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -61,11 +60,13 @@ export default function LoginPage() {
     <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8 text-center">
-          <div className="bg-primary/10 p-4 rounded-full mb-4">
-            <Users className="w-8 h-8 text-primary" />
-          </div>
+          <img
+            src={`${import.meta.env.BASE_URL}nhs-logo.svg`}
+            alt="National Honor Society"
+            className="mb-4 h-32 w-auto"
+          />
           <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="heading-login">
-            NHS (Leigh) Member Portal
+            Leigh NHS Member Portal
           </h1>
           <p className="text-muted-foreground mt-2" data-testid="text-login-subtitle">
             Sign in to access your volunteer dashboard
@@ -129,7 +130,7 @@ export default function LoginPage() {
                       </FormControl>
                       <FormMessage />
                       <p className="text-[13px] text-muted-foreground mt-1">
-                        First-time password: your Student ID
+                        Your student ID
                       </p>
                     </FormItem>
                   )}
@@ -150,7 +151,11 @@ export default function LoginPage() {
         </Card>
         
         <p className="text-center text-sm text-muted-foreground mt-8" data-testid="text-support">
-          Contact NHS officers for questions.
+          Need help signing in? Contact{" "}
+          <a className="text-primary underline-offset-4 hover:underline" href="mailto:562022@my.cuhsd.org">
+            562022@my.cuhsd.org
+          </a>{" "}
+          with questions
         </p>
       </div>
     </div>

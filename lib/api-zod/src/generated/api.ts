@@ -76,8 +76,7 @@ export const GetDashboardResponse = zod.object({
   "tutorial": zod.string(),
   "total": zod.number(),
   "hasData": zod.boolean()
-})),
-  "lastUpdatedAt": zod.union([zod.coerce.date(),zod.null()])
+}))
 })
 
 

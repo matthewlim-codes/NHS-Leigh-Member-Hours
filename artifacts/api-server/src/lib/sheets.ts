@@ -1,7 +1,12 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
-const GOOGLE_SHEET_ID_ENV = "GOOGLE_SHEET_ID";
-const GOOGLE_SHEET_TABS_ENV = "GOOGLE_SHEET_TABS";
+// --- SPREADSHEET CONFIG ------------------------------------------------------
+// To connect a different Google Sheet, update SPREADSHEET_ID and MEMBER_SHEET_TABS below.
+// SPREADSHEET_ID: the long ID in the spreadsheet URL between /d/ and /edit
+// MEMBER_SHEET_TABS: the exact tab names containing member names and hours
+const SPREADSHEET_ID = "1NAfPUYygYC_AuIVHrguiGO_7sixenv3P2JREIawRKrk";
+const MEMBER_SHEET_TABS = ["11/12", "10"];
+// ----------------------------------------------------------------------------
 
 const NAME_HEADER = "name";
 const STUDENT_ID_HEADER = "student id";
@@ -40,14 +45,6 @@ const SHEET_HOUR_SECTION_ORDER = [
   "April",
   "May",
 ] as const;
-
-export class SheetConfigError extends Error {
-  readonly name = "SheetConfigError";
-}
-
-export class SheetAccessError extends Error {
-  readonly name = "SheetAccessError";
-}
 
 export interface SheetMember {
   studentId: string;
@@ -99,20 +96,15 @@ export async function getMemberFromSheet(username: string): Promise<SheetMember 
 
 export async function listMembersFromSheet(): Promise<SheetMember[]> {
   const connectors = new ReplitConnectors();
-  const { spreadsheetId, memberSheetTabs } = getSheetConfig();
   const members: SheetMember[] = [];
 
-  for (const sheetTab of memberSheetTabs) {
+  for (const sheetTab of MEMBER_SHEET_TABS) {
     const range = encodeURIComponent(`${quoteSheetName(sheetTab)}!A:ZZ`);
     const response = await connectors.proxy(
       "google-sheet",
-      `/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+      `/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`,
       { method: "GET" }
     );
-
-    if (!response.ok) {
-      throw new SheetAccessError(`Google Sheets returned ${response.status} while reading tab "${sheetTab}".`);
-    }
 
     const data = await response.json() as { values?: string[][] };
     const rows = data.values ?? [];
@@ -161,37 +153,6 @@ export function generateUsername(fullName: string): string {
 
 export function getStudentIdTemporaryPassword(studentId: string): string {
   return normalizeStudentId(studentId);
-}
-
-function getSheetConfig(): { spreadsheetId: string; memberSheetTabs: string[] } {
-  const rawSpreadsheetId = process.env[GOOGLE_SHEET_ID_ENV]?.trim();
-  if (!rawSpreadsheetId) {
-    throw new SheetConfigError(`${GOOGLE_SHEET_ID_ENV} must be set to a Google Sheet ID or sharing URL.`);
-  }
-
-  const rawTabs = process.env[GOOGLE_SHEET_TABS_ENV]?.trim();
-  if (!rawTabs) {
-    throw new SheetConfigError(`${GOOGLE_SHEET_TABS_ENV} must be set to comma-separated sheet tab names, such as "11/12,10".`);
-  }
-
-  const memberSheetTabs = rawTabs
-    .split(",")
-    .map((tabName) => tabName.trim())
-    .filter(Boolean);
-
-  if (memberSheetTabs.length === 0) {
-    throw new SheetConfigError(`${GOOGLE_SHEET_TABS_ENV} must include at least one sheet tab name.`);
-  }
-
-  return {
-    spreadsheetId: extractSpreadsheetId(rawSpreadsheetId),
-    memberSheetTabs,
-  };
-}
-
-function extractSpreadsheetId(value: string): string {
-  const match = value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match?.[1] ?? value;
 }
 
 function quoteSheetName(sheetName: string): string {

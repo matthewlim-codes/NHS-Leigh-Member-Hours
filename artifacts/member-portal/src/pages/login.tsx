@@ -106,7 +106,7 @@ export default function LoginPage() {
                         />
                       </FormControl>
                       <p className="text-[13px] text-muted-foreground mt-1">
-                        Use First-Last with a hyphen and no spaces around it (e.g. Alexander-Hamilton).
+                        Use your first and last name separated by a hyphen (e.g. Alexander-Hamilton)
                       </p>
                       <details className="group mt-1 text-[13px] text-muted-foreground">
                         <summary className="cursor-pointer font-medium text-primary underline-offset-4 hover:underline">

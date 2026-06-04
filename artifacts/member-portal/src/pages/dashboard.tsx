@@ -26,12 +26,7 @@ export default function DashboardPage() {
     }
   }, [isAuthError, setLocation]);
 
-  const {
-    data: dashboard,
-    isError: isDashboardError,
-    isLoading: isDashboardLoading,
-    error: dashboardError
-  } = useGetDashboard({
+  const { data: dashboard, isError: isDashboardError, isLoading: isDashboardLoading, error: dashboardError } = useGetDashboard({
     query: {
       queryKey: getGetDashboardQueryKey(),
       enabled: isAuthSuccess && Boolean(user),
@@ -123,12 +118,6 @@ export default function DashboardPage() {
                 <p className="mt-2 text-muted-foreground">
                   {dashboard ? `Grade ${dashboard.grade}` : "Loading member data"}
                 </p>
-                {dashboard && (
-                  <p className="mt-1 text-sm text-muted-foreground" data-testid="text-last-updated">
-                    {formatDetectedSheetChange(dashboard.lastUpdatedAt) ??
-                      "Tracking sheet row changes from now."}
-                  </p>
-                )}
               </div>
               <div className="rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary">
                 {dashboard ? `${formatHours(dashboard.totalHours)} of ${formatHours(dashboard.annualGoal)} hours completed` : "Loading"}
@@ -190,18 +179,14 @@ export default function DashboardPage() {
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div
-                      className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0"
-                      role="tablist"
-                      aria-label="Monthly activity"
-                    >
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3" role="tablist" aria-label="Monthly activity">
                       {dashboard.monthlyHours.map((month) => (
                         <button
                           key={month.month}
                           type="button"
                           onClick={() => setSelectedMonth(month.month)}
                           className={cn(
-                            "min-w-20 shrink-0 rounded-xl px-3 py-3 text-sm font-semibold transition-all border sm:min-w-0 sm:shrink",
+                            "rounded-xl px-3 py-3 text-sm font-semibold transition-all border",
                             selectedMonth === month.month
                               ? "bg-primary text-primary-foreground border-primary shadow-md"
                               : month.hasData
@@ -363,27 +348,6 @@ function getProgressPercent(hours: number, goal: number): number {
 
 function formatHours(hours: number): string {
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
-}
-
-function formatDetectedSheetChange(lastUpdatedAt: string | Date | null | undefined): string | null {
-  const date = parseDate(lastUpdatedAt);
-  if (!date) return null;
-
-  const formattedDate = new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-
-  return `Last sheet row change detected: ${formattedDate}`;
-}
-
-function parseDate(value: string | Date | null | undefined): Date | null {
-  if (!value) return null;
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function getApiErrorMessage(error: unknown, fallback: string): string {

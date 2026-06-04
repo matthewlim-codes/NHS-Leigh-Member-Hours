@@ -14,8 +14,6 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `pnpm --filter @workspace/api-server run cleanup:stale-members` — delete DB accounts that are no longer in the current Google Sheet
 - Required env: `DATABASE_URL` — Postgres connection string
 - Required env: `SESSION_SECRET` — secret for express-session
-- Required env: `GOOGLE_SHEET_ID` — Google Sheet ID or full sharing URL for the current school year
-- Required env: `GOOGLE_SHEET_TABS` — comma-separated tab names containing member data, e.g. `11/12,10`
 
 ## Stack
 
@@ -58,7 +56,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Always run `pnpm run typecheck:libs` before `pnpm --filter @workspace/api-server run typecheck` after changing `lib/db` schema — the composite lib must be rebuilt first.
 - The Google Sheets integration uses Replit's connector proxy (`@replit/connectors-sdk`). If it returns errors, the connection may need to be re-authorized via the integrations panel.
-- The spreadsheet ID/link and member data tabs are configured with `GOOGLE_SHEET_ID` and `GOOGLE_SHEET_TABS`. To switch to next year's sheet, paste the new Google Sheets sharing link into `GOOGLE_SHEET_ID` and update `GOOGLE_SHEET_TABS` if the tab names changed. The current sheet reads the configured tabs, finds columns by header across the first few header rows, and expects `STUDENT ID`, `NAME`, and `TOTAL HOURS` columns.
+- The spreadsheet ID and member data tabs are configured in `artifacts/api-server/src/lib/sheets.ts`. The current sheet reads the `11/12` and `10` tabs, finds columns by header across the first few header rows, and expects `STUDENT ID`, `NAME`, and `TOTAL HOURS` columns.
 - Hour goals are calculated in `artifacts/api-server/src/routes/dashboard.ts`: grade 10 requires 7 annual hours; grades 11/12 require 20 annual hours, split as 9 semester 1 hours and 11 semester 2 hours.
 
 ## Pointers

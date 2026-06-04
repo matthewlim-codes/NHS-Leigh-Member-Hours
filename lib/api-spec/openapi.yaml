@@ -158,7 +158,6 @@ components:
         - semester2Goal
         - semester2Remaining
         - monthlyHours
-        - lastUpdatedAt
       properties:
         displayName:
           type: string
@@ -190,9 +189,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyHours"
-        lastUpdatedAt:
-          type: string
-          format: date-time
 
     MonthlyHours:
       type: object

@@ -45,7 +45,6 @@ export interface DashboardData {
   semester2Goal: number;
   semester2Remaining: number;
   monthlyHours: MonthlyHours[];
-  lastUpdatedAt: string;
 }
 
 export interface SuccessResponse {

@@ -1,9 +1,8 @@
 import { Router, type IRouter } from "express";
-import { createHash } from "crypto";
 import { eq } from "drizzle-orm";
 import { db, membersTable } from "@workspace/db";
 import { GetDashboardResponse } from "@workspace/api-zod";
-import { getMemberFromSheet, type SheetMember } from "../lib/sheets";
+import { getMemberFromSheet } from "../lib/sheets";
 
 const router: IRouter = Router();
 
@@ -35,9 +34,6 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     return;
   }
 
-  const rowSignature = getSheetRowSignature(sheetMember);
-  const lastUpdatedAt = await getDetectedSheetRowUpdatedAt(member, rowSignature);
-
   res.json(GetDashboardResponse.parse({
     displayName: sheetMember.displayName,
     grade: sheetMember.grade,
@@ -53,47 +49,9 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     semester2Goal: getSemester2Goal(sheetMember.grade),
     semester2Remaining: getRemaining(sheetMember.semester2Hours, getSemester2Goal(sheetMember.grade)),
     monthlyHours: sheetMember.monthlyHours,
-    lastUpdatedAt: lastUpdatedAt.toISOString(),
+    lastUpdatedAt: new Date().toISOString(),
   }));
 });
-
-async function getDetectedSheetRowUpdatedAt(
-  member: typeof membersTable.$inferSelect,
-  rowSignature: string,
-): Promise<Date> {
-  if (member.sheetRowSignature === rowSignature && member.sheetRowUpdatedAt) {
-    return member.sheetRowUpdatedAt;
-  }
-
-  const now = new Date();
-  const [updatedMember] = await db
-    .update(membersTable)
-    .set({
-      sheetRowSignature: rowSignature,
-      sheetRowUpdatedAt: now,
-    })
-    .where(eq(membersTable.id, member.id))
-    .returning({ sheetRowUpdatedAt: membersTable.sheetRowUpdatedAt });
-
-  return updatedMember.sheetRowUpdatedAt ?? now;
-}
-
-function getSheetRowSignature(sheetMember: SheetMember): string {
-  return createHash("sha256")
-    .update(JSON.stringify({
-      studentId: sheetMember.studentId,
-      username: sheetMember.username,
-      displayName: sheetMember.displayName,
-      grade: sheetMember.grade,
-      infoFormComplete: sheetMember.infoFormComplete,
-      clubDuesPaid: sheetMember.clubDuesPaid,
-      hours: sheetMember.hours,
-      semester1Hours: sheetMember.semester1Hours,
-      semester2Hours: sheetMember.semester2Hours,
-      monthlyHours: sheetMember.monthlyHours,
-    }))
-    .digest("hex");
-}
 
 function getAnnualGoal(grade: number): number {
   return grade === 10 ? GRADE_10_ANNUAL_GOAL : UPPER_GRADE_ANNUAL_GOAL;

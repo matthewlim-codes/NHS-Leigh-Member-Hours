@@ -41,6 +41,14 @@ const SHEET_HOUR_SECTION_ORDER = [
   "May",
 ] as const;
 
+export class SheetConfigError extends Error {
+  readonly name = "SheetConfigError";
+}
+
+export class SheetAccessError extends Error {
+  readonly name = "SheetAccessError";
+}
+
 export interface SheetMember {
   studentId: string;
   username: string;
@@ -102,6 +110,10 @@ export async function listMembersFromSheet(): Promise<SheetMember[]> {
       { method: "GET" }
     );
 
+    if (!response.ok) {
+      throw new SheetAccessError(`Google Sheets returned ${response.status} while reading tab "${sheetTab}".`);
+    }
+
     const data = await response.json() as { values?: string[][] };
     const rows = data.values ?? [];
 
@@ -154,12 +166,12 @@ export function getStudentIdTemporaryPassword(studentId: string): string {
 function getSheetConfig(): { spreadsheetId: string; memberSheetTabs: string[] } {
   const rawSpreadsheetId = process.env[GOOGLE_SHEET_ID_ENV]?.trim();
   if (!rawSpreadsheetId) {
-    throw new Error(`${GOOGLE_SHEET_ID_ENV} must be set to a Google Sheet ID or sharing URL.`);
+    throw new SheetConfigError(`${GOOGLE_SHEET_ID_ENV} must be set to a Google Sheet ID or sharing URL.`);
   }
 
   const rawTabs = process.env[GOOGLE_SHEET_TABS_ENV]?.trim();
   if (!rawTabs) {
-    throw new Error(`${GOOGLE_SHEET_TABS_ENV} must be set to comma-separated sheet tab names, such as "11/12,10".`);
+    throw new SheetConfigError(`${GOOGLE_SHEET_TABS_ENV} must be set to comma-separated sheet tab names, such as "11/12,10".`);
   }
 
   const memberSheetTabs = rawTabs
@@ -168,7 +180,7 @@ function getSheetConfig(): { spreadsheetId: string; memberSheetTabs: string[] } 
     .filter(Boolean);
 
   if (memberSheetTabs.length === 0) {
-    throw new Error(`${GOOGLE_SHEET_TABS_ENV} must include at least one sheet tab name.`);
+    throw new SheetConfigError(`${GOOGLE_SHEET_TABS_ENV} must include at least one sheet tab name.`);
   }
 
   return {

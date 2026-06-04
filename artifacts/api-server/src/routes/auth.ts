@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 import { db, membersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse, LogoutResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
-import { getMemberFromSheet, getStudentIdTemporaryPassword } from "../lib/sheets";
+import {
+  SheetAccessError,
+  SheetConfigError,
+  getMemberFromSheet,
+  getStudentIdTemporaryPassword,
+  type SheetMember,
+} from "../lib/sheets";
 
 const router: IRouter = Router();
 
@@ -17,7 +23,26 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const { username, password } = parsed.data;
 
-  const sheetMember = await getMemberFromSheet(username);
+  let sheetMember: SheetMember | null;
+  try {
+    sheetMember = await getMemberFromSheet(username);
+  } catch (err) {
+    req.log.error({ err, username }, "Failed to load member sheet during login");
+
+    if (err instanceof SheetConfigError) {
+      res.status(503).json({ error: "The member sheet is not configured. Please ask an officer to check the app's Google Sheet settings." });
+      return;
+    }
+
+    if (err instanceof SheetAccessError) {
+      res.status(503).json({ error: "We couldn't reach the member sheet. Please try again later or contact an NHS officer." });
+      return;
+    }
+
+    res.status(503).json({ error: "We couldn't check your member record right now. Please try again later or contact an NHS officer." });
+    return;
+  }
+
   if (!sheetMember) {
     res.status(401).json({ error: "Invalid username or password" });
     return;

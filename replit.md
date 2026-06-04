@@ -42,7 +42,7 @@ A private member portal for an NHS-style community club. Members log in to see t
 
 - **Auto-provisioning accounts**: Members are not pre-seeded. On login, the app verifies the password against the member's current `STUDENT ID` from Google Sheets, then creates the account in the DB if it does not already exist.
 - **Google Sheets as source of truth**: Hours and display names are always fetched fresh from the sheet, never cached in the DB.
-- **Sheet row update tracking**: The DB stores a per-member signature of the dashboard-relevant sheet row plus the time the app first detected that signature. This powers the "Last updated from sheet" dashboard timestamp. Google Sheets does not expose per-row edit times through the values API, so the timestamp reflects when the app detected the row change, not necessarily the exact edit time in Google Sheets.
+- **Sheet row update tracking**: The DB stores a per-member signature of the dashboard-relevant sheet row. The first read baselines the row without showing an update timestamp; later row changes set the "Last sheet row change detected" dashboard timestamp. Google Sheets does not expose per-row edit times through the values API, so the timestamp reflects when the app detected a change, not the exact edit time in Google Sheets.
 - **Session storage in PostgreSQL**: Uses connect-pg-simple so sessions survive server restarts.
 - **Username format**: `First-Last` (for sheet names stored as `Last, First`, e.g. `Lim, Matthew` → `Matthew-Lim`).
 - **Password format**: the member's `STUDENT ID` value from the sheet. Members do not change this password in the app.

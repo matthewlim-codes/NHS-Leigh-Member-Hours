@@ -26,13 +26,7 @@ export default function DashboardPage() {
     }
   }, [isAuthError, setLocation]);
 
-  const {
-    data: dashboard,
-    dataUpdatedAt: dashboardDataUpdatedAt,
-    isError: isDashboardError,
-    isLoading: isDashboardLoading,
-    error: dashboardError
-  } = useGetDashboard({
+  const { data: dashboard, isError: isDashboardError, isLoading: isDashboardLoading, error: dashboardError } = useGetDashboard({
     query: {
       queryKey: getGetDashboardQueryKey(),
       enabled: isAuthSuccess && Boolean(user),
@@ -126,7 +120,7 @@ export default function DashboardPage() {
                 </p>
                 {dashboard && (
                   <p className="mt-1 text-sm text-muted-foreground" data-testid="text-last-updated">
-                    Last updated from sheet: {formatLastUpdated(dashboard.lastUpdatedAt, dashboardDataUpdatedAt)}
+                    Last updated from sheet: {formatLastUpdated(dashboard.lastUpdatedAt)}
                   </p>
                 )}
               </div>
@@ -365,24 +359,13 @@ function formatHours(hours: number): string {
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
 }
 
-function formatLastUpdated(lastUpdatedAt: string | Date | null | undefined, fallbackTimestamp: number): string {
-  const sheetDate = parseDate(lastUpdatedAt);
-  const fallbackDate = fallbackTimestamp > 0 ? new Date(fallbackTimestamp) : null;
-  const date = sheetDate ?? fallbackDate ?? new Date();
-
+function formatLastUpdated(lastUpdatedAt: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(date);
-}
-
-function parseDate(value: string | Date | null | undefined): Date | null {
-  if (!value) return null;
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+  }).format(new Date(lastUpdatedAt));
 }
 
 function getApiErrorMessage(error: unknown, fallback: string): string {

@@ -36,7 +36,7 @@ router.get("/dashboard", async (req, res): Promise<void> => {
   }
 
   const rowSignature = getSheetRowSignature(sheetMember);
-  const lastUpdatedAt = await getDetectedSheetRowChangeAt(member, rowSignature);
+  const lastUpdatedAt = await getDetectedSheetRowUpdatedAt(member, rowSignature);
 
   res.json(GetDashboardResponse.parse({
     displayName: sheetMember.displayName,
@@ -53,29 +53,16 @@ router.get("/dashboard", async (req, res): Promise<void> => {
     semester2Goal: getSemester2Goal(sheetMember.grade),
     semester2Remaining: getRemaining(sheetMember.semester2Hours, getSemester2Goal(sheetMember.grade)),
     monthlyHours: sheetMember.monthlyHours,
-    lastUpdatedAt: lastUpdatedAt?.toISOString() ?? null,
+    lastUpdatedAt: lastUpdatedAt.toISOString(),
   }));
 });
 
-async function getDetectedSheetRowChangeAt(
+async function getDetectedSheetRowUpdatedAt(
   member: typeof membersTable.$inferSelect,
   rowSignature: string,
-): Promise<Date | null> {
-  if (member.sheetRowSignature === rowSignature) {
-    return member.sheetRowChangeDetectedAt;
-  }
-
-  if (!member.sheetRowSignature) {
-    await db
-      .update(membersTable)
-      .set({
-        sheetRowSignature: rowSignature,
-        sheetRowUpdatedAt: null,
-        sheetRowChangeDetectedAt: null,
-      })
-      .where(eq(membersTable.id, member.id));
-
-    return null;
+): Promise<Date> {
+  if (member.sheetRowSignature === rowSignature && member.sheetRowUpdatedAt) {
+    return member.sheetRowUpdatedAt;
   }
 
   const now = new Date();
@@ -84,12 +71,11 @@ async function getDetectedSheetRowChangeAt(
     .set({
       sheetRowSignature: rowSignature,
       sheetRowUpdatedAt: now,
-      sheetRowChangeDetectedAt: now,
     })
     .where(eq(membersTable.id, member.id))
-    .returning({ sheetRowChangeDetectedAt: membersTable.sheetRowChangeDetectedAt });
+    .returning({ sheetRowUpdatedAt: membersTable.sheetRowUpdatedAt });
 
-  return updatedMember.sheetRowChangeDetectedAt ?? now;
+  return updatedMember.sheetRowUpdatedAt ?? now;
 }
 
 function getSheetRowSignature(sheetMember: SheetMember): string {

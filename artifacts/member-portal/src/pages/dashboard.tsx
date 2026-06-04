@@ -28,6 +28,7 @@ export default function DashboardPage() {
 
   const {
     data: dashboard,
+    dataUpdatedAt: dashboardDataUpdatedAt,
     isError: isDashboardError,
     isLoading: isDashboardLoading,
     error: dashboardError
@@ -125,8 +126,7 @@ export default function DashboardPage() {
                 </p>
                 {dashboard && (
                   <p className="mt-1 text-sm text-muted-foreground" data-testid="text-last-updated">
-                    {formatDetectedSheetChange(dashboard.lastUpdatedAt) ??
-                      "Tracking sheet row changes from now."}
+                    Last updated from sheet: {formatLastUpdated(dashboard.lastUpdatedAt, dashboardDataUpdatedAt)}
                   </p>
                 )}
               </div>
@@ -365,18 +365,17 @@ function formatHours(hours: number): string {
   return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
 }
 
-function formatDetectedSheetChange(lastUpdatedAt: string | Date | null | undefined): string | null {
-  const date = parseDate(lastUpdatedAt);
-  if (!date) return null;
+function formatLastUpdated(lastUpdatedAt: string | Date | null | undefined, fallbackTimestamp: number): string {
+  const sheetDate = parseDate(lastUpdatedAt);
+  const fallbackDate = fallbackTimestamp > 0 ? new Date(fallbackTimestamp) : null;
+  const date = sheetDate ?? fallbackDate ?? new Date();
 
-  const formattedDate = new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-
-  return `Last sheet row change detected: ${formattedDate}`;
 }
 
 function parseDate(value: string | Date | null | undefined): Date | null {

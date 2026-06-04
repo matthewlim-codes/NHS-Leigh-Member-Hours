@@ -7,8 +7,7 @@ export function ensureMemberTrackingColumns(): Promise<void> {
     await pool.query(`
       ALTER TABLE members
         ADD COLUMN IF NOT EXISTS sheet_row_signature text,
-        ADD COLUMN IF NOT EXISTS sheet_row_updated_at timestamptz,
-        ADD COLUMN IF NOT EXISTS sheet_row_change_detected_at timestamptz
+        ADD COLUMN IF NOT EXISTS sheet_row_updated_at timestamptz
     `);
   })();
 

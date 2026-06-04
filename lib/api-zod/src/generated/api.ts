@@ -77,7 +77,7 @@ export const GetDashboardResponse = zod.object({
   "total": zod.number(),
   "hasData": zod.boolean()
 })),
-  "lastUpdatedAt": zod.union([zod.coerce.date(),zod.null()])
+  "lastUpdatedAt": zod.coerce.date()
 })
 
 

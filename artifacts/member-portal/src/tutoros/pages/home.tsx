@@ -1,20 +1,53 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { CheckCircle2, PlayCircle, Sparkles } from "lucide-react";
 import { TutorOsShell } from "../components/shell";
-import { listMySessions, type SessionListResponse } from "../lib/api";
+import {
+  claimTutoringRequest,
+  listMySessions,
+  listTutoringRequests,
+  type SessionListResponse,
+  type TutoringRequest,
+} from "../lib/api";
 
 export default function TutorOsHomePage() {
+  const [, setLocation] = useLocation();
   const [data, setData] = useState<SessionListResponse | null>(null);
+  const [openRequests, setOpenRequests] = useState<TutoringRequest[]>([]);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
 
   useEffect(() => {
     listMySessions()
       .then(setData)
-      .catch(() => setData({ sessions: [], stats: { total: 0, learningMoments: 0, unverified: 0, awaitingVerify: 0 } }));
+      .catch(() =>
+        setData({
+          sessions: [],
+          stats: { total: 0, learningMoments: 0, unverified: 0, awaitingVerify: 0 },
+        }),
+      );
+    listTutoringRequests({ status: "open" })
+      .then((res) => setOpenRequests(res.requests))
+      .catch(() => setOpenRequests([]));
   }, []);
 
   const stats = data?.stats;
   const recent = data?.sessions.slice(0, 3) ?? [];
+
+  const onClaim = async (request: TutoringRequest) => {
+    setClaimingId(request.id);
+    try {
+      await claimTutoringRequest(request.id);
+      const params = new URLSearchParams({
+        tutee: request.studentName,
+        subject: request.subject,
+        topic: request.topic,
+        requestId: request.id,
+      });
+      setLocation(`/tutoros/start?${params.toString()}`);
+    } catch {
+      setClaimingId(null);
+    }
+  };
 
   return (
     <TutorOsShell>
@@ -63,6 +96,46 @@ export default function TutorOsHomePage() {
           </Link>
         </div>
 
+        {openRequests.length > 0 && (
+          <section className="mt-8" data-testid="open-requests">
+            <h3 className="text-lg font-bold text-slate-900">Open teacher requests</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Claim a student assigned by a teacher — we&apos;ll prefill your session.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {openRequests.map((request) => (
+                <li
+                  key={request.id}
+                  className="rounded-2xl border border-slate-200 px-4 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {request.studentName} · Grade {request.grade}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {request.subject} · {request.topic}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Assigned by {request.assignedBy}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void onClaim(request)}
+                      disabled={claimingId === request.id}
+                      className="shrink-0 rounded-full bg-[#1865F2] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      data-testid={`button-claim-${request.id}`}
+                    >
+                      {claimingId === request.id ? "..." : "Claim"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <div className="mt-6 grid grid-cols-3 gap-2">
           <Stat label="Sessions" value={stats?.total ?? 0} />
           <Stat label="Verified" value={stats?.learningMoments ?? 0} />
@@ -78,7 +151,7 @@ export default function TutorOsHomePage() {
           </div>
           {recent.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              No sessions yet. Try the demo: Maria · Algebra II · factoring.
+              No sessions yet. Try the demo: Maria Garcia · Algebra II · factoring quadratics.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

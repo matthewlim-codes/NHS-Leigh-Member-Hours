@@ -3,6 +3,13 @@
  * Falls back to an in-memory store when BUTTERBASE_API_KEY is unset.
  */
 
+import {
+  buildDemoTuteeMemoryMap,
+  DEMO_TUTORING_REQUESTS,
+  slugifyTutee,
+  teacherNotesFromMemory,
+} from "./tutoros-demo-data";
+
 const APP_ID = process.env.BUTTERBASE_APP_ID ?? "app_tsc2mvlq21yo";
 const API_BASE = process.env.BUTTERBASE_API_URL ?? `https://api.butterbase.ai/v1/${APP_ID}`;
 
@@ -82,27 +89,11 @@ const memoryFallback = new Map<string, TuteeMemory>();
 const sessionFallback = new Map<string, TutorOsSession>();
 
 function seedDemoMemory() {
-  if (memoryFallback.has("maria")) return;
-  memoryFallback.set("maria", {
-    tuteeSlug: "maria",
-    tuteeName: "Maria",
-    profile: {
-      preferredApproach: "visual / box method",
-      struggles: ["sign errors when factoring", "jumps to FOIL without structure"],
-      skills: ["needs guidance on factoring quadratics"],
-    },
-    episodes: [
-      {
-        topic: "factoring quadratics",
-        summary:
-          "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5.",
-        outcome: "struggled",
-        approach: "formula-first",
-        when: "prior",
-        score: 2,
-      },
-    ],
-  });
+  for (const [slug, memory] of Object.entries(buildDemoTuteeMemoryMap())) {
+    if (!memoryFallback.has(slug)) {
+      memoryFallback.set(slug, memory);
+    }
+  }
 }
 
 seedDemoMemory();
@@ -177,7 +168,18 @@ function emptyBrief(): PrepBrief {
 }
 
 export function tuteeSlugFromName(name: string): string {
-  return slugify(name);
+  return slugifyTutee(name);
+}
+
+/** Reset a tutee's memory to the demo first-session profile (teacher notes, no episodes). */
+export async function resetTuteeMemory(tuteeSlug: string): Promise<TuteeMemory | null> {
+  seedDemoMemory();
+  const demo = buildDemoTuteeMemoryMap()[tuteeSlug];
+  if (!demo) return null;
+
+  memoryFallback.set(tuteeSlug, demo);
+  await upsertTuteeMemory(demo);
+  return demo;
 }
 
 export async function getTuteeMemory(tuteeSlug: string): Promise<TuteeMemory | null> {
@@ -240,20 +242,24 @@ export function buildPrepBrief(input: {
   memory: TuteeMemory | null;
 }): PrepBrief {
   const { tuteeName, subject, topic, memory } = input;
+  const teacherNotes = teacherNotesFromMemory(memory);
   if (!memory || memory.episodes.length === 0) {
+    const contextBullets =
+      teacherNotes.length > 0
+        ? teacherNotes
+        : [`Teacher focus area: ${topic}`, "Check in on confidence before diving into problems."];
     return {
-      struggles: [`No prior TutorOS memory for ${tuteeName} yet.`],
+      struggles: Array.isArray(memory?.profile.struggles)
+        ? memory.profile.struggles.map(String)
+        : [`No prior TutorOS memory for ${tuteeName} yet.`],
       recommendedApproach: "Confidence-building warm-up, then one guided example.",
       workedExample: workedExampleFor(subject, topic, false),
       watchFors: [
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
-      contextTitle: "What they need help with",
-      contextBullets: [
-        `Teacher focus area: ${topic}`,
-        "Check in on confidence before diving into problems.",
-      ],
+      contextTitle: teacherNotes.length > 0 ? "What the teacher noted" : "What they need help with",
+      contextBullets,
       approachBullets: [
         "Open with a quick warm-up question on a prerequisite skill.",
         "Model one example out loud, narrating each step.",
@@ -264,7 +270,8 @@ export function buildPrepBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
-      memorySource: "empty",
+      teacherNotes: teacherNotes.length > 0 ? teacherNotes : undefined,
+      memorySource: teacherNotes.length > 0 ? "demo" : "empty",
       isAdapted: false,
     };
   }
@@ -427,7 +434,7 @@ export async function createSession(input: {
   subject: string;
   topic: string;
 }): Promise<TutorOsSession> {
-  const tuteeSlug = slugify(input.tuteeName);
+  const tuteeSlug = slugifyTutee(input.tuteeName);
   const { generatePrepBrief } = await import("./prep-agent");
   const prepBrief = await generatePrepBrief({
     tuteeName: input.tuteeName,
@@ -665,6 +672,118 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
   };
 
   await upsertTuteeMemory(next);
+}
+
+export type TutoringRequestStatus = "open" | "claimed" | "done";
+
+export interface TutoringRequest {
+  id: string;
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string | null;
+  status: TutoringRequestStatus;
+  claimedByUsername?: string | null;
+  claimedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const requestFallback = new Map<string, TutoringRequest>();
+
+function seedDemoRequests() {
+  if (requestFallback.size > 0) return;
+  const now = new Date().toISOString();
+  for (const demo of DEMO_TUTORING_REQUESTS) {
+    requestFallback.set(demo.id, {
+      id: demo.id,
+      studentName: demo.studentName,
+      grade: demo.grade,
+      assignedBy: demo.assignedBy,
+      subject: demo.subject,
+      topic: demo.topic,
+      notes: demo.notes,
+      status: "open",
+      claimedByUsername: null,
+      claimedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+seedDemoRequests();
+
+export async function createTutoringRequest(input: {
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string;
+}): Promise<TutoringRequest> {
+  const now = new Date().toISOString();
+  const request: TutoringRequest = {
+    id: crypto.randomUUID(),
+    studentName: input.studentName.trim(),
+    grade: input.grade.trim(),
+    assignedBy: input.assignedBy.trim(),
+    subject: input.subject.trim(),
+    topic: input.topic.trim(),
+    notes: input.notes?.trim() || null,
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  requestFallback.set(request.id, request);
+  return request;
+}
+
+export async function listTutoringRequests(filter?: {
+  status?: TutoringRequestStatus;
+}): Promise<TutoringRequest[]> {
+  seedDemoRequests();
+  const all = Array.from(requestFallback.values());
+  const filtered = filter?.status ? all.filter((r) => r.status === filter.status) : all;
+  return filtered.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+export async function getTutoringRequest(id: string): Promise<TutoringRequest | null> {
+  return requestFallback.get(id) ?? null;
+}
+
+export async function claimTutoringRequest(
+  id: string,
+  tutorUsername: string,
+): Promise<TutoringRequest | null> {
+  const existing = requestFallback.get(id);
+  if (!existing || existing.status !== "open") return null;
+  const now = new Date().toISOString();
+  const updated: TutoringRequest = {
+    ...existing,
+    status: "claimed",
+    claimedByUsername: tutorUsername,
+    claimedAt: now,
+    updatedAt: now,
+  };
+  requestFallback.set(id, updated);
+  return updated;
+}
+
+export async function completeTutoringRequest(id: string): Promise<TutoringRequest | null> {
+  const existing = requestFallback.get(id);
+  if (!existing) return null;
+  const updated: TutoringRequest = {
+    ...existing,
+    status: "done",
+    updatedAt: new Date().toISOString(),
+  };
+  requestFallback.set(id, updated);
+  return updated;
 }
 
 export function getButterbaseAppId(): string {

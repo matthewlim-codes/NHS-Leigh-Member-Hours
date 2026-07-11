@@ -9,4 +9,6 @@
 export interface AuthUser {
   id: number;
   username: string;
+  /** Account role. Defaults to member when omitted. */
+  role?: "member" | "teacher";
 }

@@ -65,7 +65,11 @@ function extractProblemStatement(workedExample: string, topic: string): string {
 export function normalizePrepBrief(brief: PrepBrief, topic: string): NormalizedPrepBrief {
   const contextTitle =
     brief.contextTitle ??
-    (brief.isAdapted ? "Last session review" : "What they need help with");
+    (brief.isAdapted
+      ? "Last session review"
+      : brief.teacherNotes?.length || (brief.contextBullets?.length && brief.memorySource === "demo")
+        ? "What the teacher noted"
+        : "What they need help with");
 
   const contextBullets =
     brief.contextBullets?.length

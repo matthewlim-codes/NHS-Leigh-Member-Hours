@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { PrimaryButton, TutorOsHeader, TutorOsShell } from "../components/shell";
 import { startSession } from "../lib/api";
 
@@ -14,13 +14,32 @@ const SUBJECTS = [
   "Digital SAT Math",
 ];
 
+function readParam(search: string, key: string) {
+  return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get(key) ?? "";
+}
+
 export default function TutorOsStartPage() {
   const [, setLocation] = useLocation();
-  const [tuteeName, setTuteeName] = useState("Maria");
-  const [subject, setSubject] = useState("Algebra II");
-  const [topic, setTopic] = useState("factoring");
+  const search = useSearch();
+
+  const prefill = useMemo(
+    () => ({
+      tutee: readParam(search, "tutee"),
+      subject: readParam(search, "subject"),
+      topic: readParam(search, "topic"),
+    }),
+    [search],
+  );
+
+  const [tuteeName, setTuteeName] = useState(prefill.tutee || "Maria Garcia");
+  const [subject, setSubject] = useState(
+    SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II",
+  );
+  const [topic, setTopic] = useState(prefill.topic || "factoring quadratics");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fromTeacher = Boolean(prefill.tutee && prefill.subject && prefill.topic);
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -45,13 +64,19 @@ export default function TutorOsStartPage() {
           brief from memory.
         </p>
 
+        {fromTeacher && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Prefilled from a teacher request. Adjust if needed, then start.
+          </div>
+        )}
+
         <label className="block space-y-1.5">
           <span className="text-sm font-semibold text-slate-800">Tutee name</span>
           <input
             value={tuteeName}
             onChange={(e) => setTuteeName(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="Maria"
+            placeholder="Maria Garcia"
             required
           />
         </label>
@@ -59,10 +84,13 @@ export default function TutorOsStartPage() {
         <label className="block space-y-1.5">
           <span className="text-sm font-semibold text-slate-800">Subject</span>
           <select
-            value={subject}
+            value={SUBJECTS.includes(subject) ? subject : SUBJECTS[0]}
             onChange={(e) => setSubject(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white"
           >
+            {!SUBJECTS.includes(subject) && subject ? (
+              <option value={subject}>{subject}</option>
+            ) : null}
             {SUBJECTS.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -77,24 +105,18 @@ export default function TutorOsStartPage() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="factoring"
+            placeholder="factoring quadratics"
             required
           />
         </label>
 
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         )}
 
         <PrimaryButton type="submit" disabled={loading}>
-          {loading ? "Building prep brief…" : "Generate prep brief"}
+          {loading ? "Building prep brief..." : "Build prep brief"}
         </PrimaryButton>
-
-        <p className="text-center text-xs text-slate-400">
-          Demo tip: keep Maria + factoring to see adapted memory on session 2.
-        </p>
       </form>
     </TutorOsShell>
   );

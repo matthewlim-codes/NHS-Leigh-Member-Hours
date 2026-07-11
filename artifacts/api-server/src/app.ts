@@ -76,4 +76,17 @@ app.use(
 
 app.use("/api", router);
 
+logger.info(
+  {
+    tutoros: true,
+    routes: [
+      "GET /api/tutoros/meta",
+      "POST /api/tutoros/sessions/start",
+      "GET /api/tutoros/sessions",
+      "GET /api/tutoros/command",
+    ],
+  },
+  "TutorOS API routes mounted",
+);
+
 export default app;

@@ -184,7 +184,7 @@ export async function getTuteeMemory(tuteeSlug: string): Promise<TuteeMemory | n
   seedDemoMemory();
   try {
     const data = await bbFetch(
-      `/data/tutee_memory?tutee_slug=eq.${encodeURIComponent(tuteeSlug)}&limit=1`,
+      `/tutee_memory?tutee_slug=eq.${encodeURIComponent(tuteeSlug)}&limit=1`,
     );
     if (Array.isArray(data) && data[0]) {
       const row = data[0] as Record<string, unknown>;
@@ -205,10 +205,10 @@ export async function upsertTuteeMemory(memory: TuteeMemory): Promise<void> {
   memoryFallback.set(memory.tuteeSlug, memory);
   try {
     const existing = await bbFetch(
-      `/data/tutee_memory?tutee_slug=eq.${encodeURIComponent(memory.tuteeSlug)}&limit=1`,
+      `/tutee_memory?tutee_slug=eq.${encodeURIComponent(memory.tuteeSlug)}&limit=1`,
     );
     if (Array.isArray(existing) && existing[0]) {
-      await bbFetch(`/data/tutee_memory?tutee_slug=eq.${encodeURIComponent(memory.tuteeSlug)}`, {
+      await bbFetch(`/tutee_memory?tutee_slug=eq.${encodeURIComponent(memory.tuteeSlug)}`, {
         method: "PATCH",
         body: JSON.stringify({
           tutee_name: memory.tuteeName,
@@ -219,7 +219,7 @@ export async function upsertTuteeMemory(memory: TuteeMemory): Promise<void> {
       });
       return;
     }
-    await bbFetch(`/data/tutee_memory`, {
+    await bbFetch(`/tutee_memory`, {
       method: "POST",
       body: JSON.stringify({
         tutee_slug: memory.tuteeSlug,
@@ -458,7 +458,7 @@ export async function createSession(input: {
   sessionFallback.set(id, session);
 
   try {
-    const row = await bbFetch(`/data/sessions`, {
+    const row = await bbFetch(`/sessions`, {
       method: "POST",
       body: JSON.stringify({
         id,
@@ -489,7 +489,7 @@ export async function createSession(input: {
 
 export async function getSession(id: string): Promise<TutorOsSession | null> {
   try {
-    const data = await bbFetch(`/data/sessions?id=eq.${encodeURIComponent(id)}&limit=1`);
+    const data = await bbFetch(`/sessions?id=eq.${encodeURIComponent(id)}&limit=1`);
     if (Array.isArray(data) && data[0]) {
       const mapped = mapSessionRow(data[0] as Record<string, unknown>);
       sessionFallback.set(id, mapped);
@@ -517,7 +517,7 @@ export async function updateSession(
   sessionFallback.set(id, updated);
 
   try {
-    await bbFetch(`/data/sessions?id=eq.${encodeURIComponent(id)}`, {
+    await bbFetch(`/sessions?id=eq.${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({
         status: updated.status,
@@ -545,10 +545,57 @@ export async function updateSession(
   return updated;
 }
 
+export async function purgeSessionsForTutor(
+  tutorUsername: string,
+  options?: { tuteeSlug?: string; tuteeName?: string },
+): Promise<{ deleted: number; ids: string[] }> {
+  const deletedIds: string[] = [];
+
+  for (const [id, session] of sessionFallback.entries()) {
+    if (session.tutorUsername !== tutorUsername) continue;
+    if (options?.tuteeSlug && session.tuteeSlug !== options.tuteeSlug) continue;
+    if (
+      options?.tuteeName &&
+      session.tuteeName.trim().toLowerCase() !== options.tuteeName.trim().toLowerCase()
+    ) {
+      continue;
+    }
+    sessionFallback.delete(id);
+    deletedIds.push(id);
+  }
+
+  try {
+    let query = `/sessions?tutor_username=eq.${encodeURIComponent(tutorUsername)}&select=id,tutee_slug,tutee_name&limit=100`;
+    if (options?.tuteeSlug) {
+      query += `&tutee_slug=eq.${encodeURIComponent(options.tuteeSlug)}`;
+    }
+    const data = await bbFetch(query);
+    if (Array.isArray(data)) {
+      for (const row of data) {
+        const record = row as Record<string, unknown>;
+        const id = String(record.id);
+        if (
+          options?.tuteeName &&
+          String(record.tutee_name).trim().toLowerCase() !==
+            options.tuteeName.trim().toLowerCase()
+        ) {
+          continue;
+        }
+        await bbFetch(`/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!deletedIds.includes(id)) deletedIds.push(id);
+      }
+    }
+  } catch {
+    // in-memory fallback already cleared
+  }
+
+  return { deleted: deletedIds.length, ids: deletedIds };
+}
+
 export async function listSessionsForTutor(tutorUsername: string): Promise<TutorOsSession[]> {
   try {
     const data = await bbFetch(
-      `/data/sessions?tutor_username=eq.${encodeURIComponent(tutorUsername)}&order=started_at.desc&limit=50`,
+      `/sessions?tutor_username=eq.${encodeURIComponent(tutorUsername)}&order=created_at.desc&limit=50`,
     );
     if (Array.isArray(data)) {
       return data.map((row) => mapSessionRow(row as Record<string, unknown>));

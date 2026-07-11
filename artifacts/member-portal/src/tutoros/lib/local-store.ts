@@ -36,7 +36,19 @@ function readSessions(): TutorOsSession[] {
     const raw = localStorage.getItem(SESSIONS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as TutorOsSession[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    const filtered = parsed.filter(
+      (s) =>
+        !(
+          s.tuteeSlug === "maria" &&
+          (s.tutorUsername === "Matthew-Lim" || s.tutorUsername === "local-tutor")
+        ),
+    );
+    if (filtered.length !== parsed.length) {
+      writeSessions(filtered);
+    }
+    return filtered;
   } catch {
     return [];
   }
@@ -431,5 +443,26 @@ export const localTutorOs = {
     });
     rememberAfterVerify(updated);
     return updated;
+  },
+
+  purgeSessions(input: { tuteeName?: string; tuteeSlug?: string } = {}): {
+    deleted: number;
+    ids: string[];
+  } {
+    const sessions = readSessions();
+    const kept = sessions.filter((s) => {
+      if (input.tuteeSlug && s.tuteeSlug !== input.tuteeSlug) return true;
+      if (
+        input.tuteeName &&
+        s.tuteeName.trim().toLowerCase() !== input.tuteeName.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (!input.tuteeSlug && !input.tuteeName) return false;
+      return false;
+    });
+    const deletedIds = sessions.filter((s) => !kept.includes(s)).map((s) => s.id);
+    writeSessions(kept);
+    return { deleted: deletedIds.length, ids: deletedIds };
   },
 };

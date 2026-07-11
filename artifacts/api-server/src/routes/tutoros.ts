@@ -5,6 +5,7 @@ import {
   createSession,
   getSession,
   listSessionsForTutor,
+  purgeSessionsForTutor,
   rememberAfterVerify,
   scoreVerification,
   updateSession,
@@ -30,6 +31,28 @@ router.get("/tutoros/meta", (_req, res): void => {
     butterbaseConfigured: Boolean(process.env.BUTTERBASE_API_KEY),
     prepAgent: "llm",
   });
+});
+
+router.post("/tutoros/sessions/purge", async (req, res): Promise<void> => {
+  const username = requireAuth(req, res);
+  if (!username) return;
+
+  const tuteeName =
+    typeof req.body?.tuteeName === "string" ? req.body.tuteeName.trim() : undefined;
+  const tuteeSlug =
+    typeof req.body?.tuteeSlug === "string" ? req.body.tuteeSlug.trim() : undefined;
+
+  try {
+    const result = await purgeSessionsForTutor(username, {
+      tuteeName,
+      tuteeSlug,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to purge sessions",
+    });
+  }
 });
 
 router.post("/tutoros/sessions/start", async (req, res): Promise<void> => {

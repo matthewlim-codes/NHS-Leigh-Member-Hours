@@ -203,6 +203,19 @@ export function endSession(
   );
 }
 
+export function purgeSessions(
+  input: { tuteeName?: string; tuteeSlug?: string } = {},
+) {
+  return withFallback(
+    () =>
+      api<{ deleted: number; ids: string[] }>("/tutoros/sessions/purge", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.purgeSessions(input),
+  );
+}
+
 export function verifySession(id: string, input: { explanation: string; answer: string }) {
   return withFallback(
     () =>

@@ -542,6 +542,94 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
   await upsertTuteeMemory(next);
 }
 
+export type TutoringRequestStatus = "open" | "claimed" | "done";
+
+export interface TutoringRequest {
+  id: string;
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string | null;
+  status: TutoringRequestStatus;
+  claimedByUsername?: string | null;
+  claimedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const requestFallback = new Map<string, TutoringRequest>();
+
+export async function createTutoringRequest(input: {
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string;
+}): Promise<TutoringRequest> {
+  const now = new Date().toISOString();
+  const request: TutoringRequest = {
+    id: crypto.randomUUID(),
+    studentName: input.studentName.trim(),
+    grade: input.grade.trim(),
+    assignedBy: input.assignedBy.trim(),
+    subject: input.subject.trim(),
+    topic: input.topic.trim(),
+    notes: input.notes?.trim() || null,
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  requestFallback.set(request.id, request);
+  return request;
+}
+
+export async function listTutoringRequests(filter?: {
+  status?: TutoringRequestStatus;
+}): Promise<TutoringRequest[]> {
+  const all = Array.from(requestFallback.values());
+  const filtered = filter?.status ? all.filter((r) => r.status === filter.status) : all;
+  return filtered.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+export async function getTutoringRequest(id: string): Promise<TutoringRequest | null> {
+  return requestFallback.get(id) ?? null;
+}
+
+export async function claimTutoringRequest(
+  id: string,
+  tutorUsername: string,
+): Promise<TutoringRequest | null> {
+  const existing = requestFallback.get(id);
+  if (!existing || existing.status !== "open") return null;
+  const now = new Date().toISOString();
+  const updated: TutoringRequest = {
+    ...existing,
+    status: "claimed",
+    claimedByUsername: tutorUsername,
+    claimedAt: now,
+    updatedAt: now,
+  };
+  requestFallback.set(id, updated);
+  return updated;
+}
+
+export async function completeTutoringRequest(id: string): Promise<TutoringRequest | null> {
+  const existing = requestFallback.get(id);
+  if (!existing) return null;
+  const updated: TutoringRequest = {
+    ...existing,
+    status: "done",
+    updatedAt: new Date().toISOString(),
+  };
+  requestFallback.set(id, updated);
+  return updated;
+}
+
 export function getButterbaseAppId(): string {
   return APP_ID;
 }

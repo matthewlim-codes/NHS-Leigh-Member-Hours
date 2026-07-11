@@ -193,3 +193,57 @@ export function verifySession(id: string, input: { explanation: string; answer: 
     () => localTutorOs.verifySession(id, input),
   );
 }
+
+export type TutoringRequestStatus = "open" | "claimed" | "done";
+
+export interface TutoringRequest {
+  id: string;
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string | null;
+  status: TutoringRequestStatus;
+  claimedByUsername?: string | null;
+  claimedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listTutoringRequests(filter?: { status?: TutoringRequestStatus }) {
+  const query = filter?.status ? `?status=${filter.status}` : "";
+  return withFallback(
+    () => api<{ requests: TutoringRequest[] }>(`/tutoros/requests${query}`),
+    () => localTutorOs.listTutoringRequests(filter),
+  );
+}
+
+export function createTutoringRequest(input: {
+  studentName: string;
+  grade: string;
+  assignedBy: string;
+  subject: string;
+  topic: string;
+  notes?: string;
+}) {
+  return withFallback(
+    () =>
+      api<TutoringRequest>("/tutoros/requests", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.createTutoringRequest(input),
+  );
+}
+
+export function claimTutoringRequest(id: string) {
+  return withFallback(
+    () =>
+      api<TutoringRequest>(`/tutoros/requests/${id}/claim`, {
+        method: "POST",
+        body: "{}",
+      }),
+    () => localTutorOs.claimTutoringRequest(id),
+  );
+}

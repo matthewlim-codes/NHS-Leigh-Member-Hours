@@ -123,11 +123,26 @@ export default function TutorOsSessionPage() {
             {session.tuteeName} · {session.topic}
           </h2>
           {brief.isAdapted ? (
-            <p className="mt-2 text-sm text-emerald-300">Adapted from prior memory</p>
+            <p className="mt-2 text-sm text-emerald-300">
+              {brief.memorySource === "ai" ? "AI prep · adapted from memory" : "Adapted from prior memory"}
+            </p>
           ) : (
-            <p className="mt-2 text-sm text-blue-200">First session — generic prep</p>
+            <p className="mt-2 text-sm text-blue-200">
+              {brief.memorySource === "ai" ? "AI prep · first session" : "First session — starter prep"}
+            </p>
           )}
         </div>
+
+        {brief.coachNote && (
+          <section className="rounded-2xl border border-[#1865F2]/25 bg-blue-50/50 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1865F2]">
+              Coach note
+            </h3>
+            <p className="mt-2 text-[15px] leading-relaxed text-slate-800 whitespace-pre-wrap">
+              {brief.coachNote}
+            </p>
+          </section>
+        )}
 
         {session.status === "active" && (
           <div className="rounded-2xl border border-slate-200 px-4 py-5 text-center">

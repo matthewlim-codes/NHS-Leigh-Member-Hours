@@ -1,5 +1,4 @@
 import type {
-  CommandResponse,
   PrepBrief,
   SessionListResponse,
   SessionType,
@@ -9,6 +8,7 @@ import type {
 
 const SESSIONS_KEY = "tutoros-sessions-v1";
 const MEMORY_KEY = "tutoros-memory-v1";
+const PREP_FN_URL = "https://api.butterbase.ai/v1/app_tsc2mvlq21yo/fn/prep-brief";
 
 interface TuteeMemory {
   tuteeSlug: string;
@@ -85,7 +85,7 @@ function seedMaria(): Record<string, TuteeMemory> {
   };
 }
 
-function buildPrepBrief(input: {
+function buildTemplateBrief(input: {
   tuteeName: string;
   subject: string;
   topic: string;
@@ -96,11 +96,12 @@ function buildPrepBrief(input: {
     return {
       struggles: [`No prior TutorOS memory for ${tuteeName} yet.`],
       recommendedApproach: "Confidence-building warm-up, then one guided example.",
-      workedExample: workedExampleFor(subject, topic, false),
+      workedExample: `Walk one worked example for ${topic} in ${subject} together, then ask the student to try a near-transfer problem.`,
       watchFors: [
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
+      coachNote: `You're meeting ${tuteeName} for ${subject} on ${topic}. Start with a quick confidence check, teach one clear example out loud, then hand them a similar problem while you coach. Keep the session interactive — have them narrate each step.`,
       memorySource: "empty",
       isAdapted: false,
     };
@@ -108,32 +109,56 @@ function buildPrepBrief(input: {
 
   const episode = memory.episodes[0];
   const preferred = memory.profile.preferredApproach ?? "visual / structured walkthrough";
-  const struggles = memory.profile.struggles ?? [episode.summary];
 
   return {
-    struggles: [episode.summary, ...struggles.filter((s) => !episode.summary.includes(s)).slice(0, 2)],
+    struggles: [episode.summary, ...(memory.profile.struggles ?? []).slice(0, 2)],
     recommendedApproach: `Use ${preferred} — prior sessions show this works better for ${tuteeName}.`,
-    workedExample: workedExampleFor(subject, topic, true),
+    workedExample:
+      "Box method for x² + 5x + 6: fill the box with factors of 6 that sum to 5 → (x+2)(x+3). Have them place the terms.",
     watchFors: [
       "Watch for the same mistake from last time.",
       "Have them narrate each step out loud.",
-      episode.approach === "formula-first"
-        ? "Avoid jumping straight to formulas — start with the box method."
-        : "Confirm they can transfer the approach to a new problem.",
+      "Avoid jumping straight to formulas — start with the box method.",
     ],
+    coachNote: `${tuteeName} already has history on ${topic}: ${episode.summary} Lead with ${preferred}. Open by asking what they remember from last time, then rebuild the idea with a visual example before any independent practice.`,
     memorySource: "demo",
     isAdapted: true,
   };
 }
 
-function workedExampleFor(subject: string, topic: string, adapted: boolean): string {
-  const t = `${subject} ${topic}`.toLowerCase();
-  if (t.includes("factor") || t.includes("algebra")) {
-    return adapted
-      ? "Box method for x² + 5x + 6: fill the box with factors of 6 that sum to 5 → (x+2)(x+3). Have Maria place the terms herself."
-      : "Factor x² + 5x + 6 by finding two numbers that multiply to 6 and add to 5 → (x+2)(x+3).";
+async function fetchAiPrepBrief(input: {
+  tuteeName: string;
+  subject: string;
+  topic: string;
+  memory: TuteeMemory | null;
+}): Promise<PrepBrief | null> {
+  try {
+    const response = await fetch(PREP_FN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tuteeName: input.tuteeName,
+        subject: input.subject,
+        topic: input.topic,
+        memory: input.memory,
+      }),
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as PrepBrief & { error?: string };
+    if (!data || data.error) return null;
+    if (!data.recommendedApproach || !data.workedExample) return null;
+    return {
+      struggles: Array.isArray(data.struggles) ? data.struggles : [],
+      recommendedApproach: String(data.recommendedApproach),
+      workedExample: String(data.workedExample),
+      watchFors: Array.isArray(data.watchFors) ? data.watchFors : [],
+      coachNote: data.coachNote ? String(data.coachNote) : undefined,
+      memorySource: data.memorySource === "ai" ? "ai" : data.isAdapted ? "demo" : "empty",
+      isAdapted: Boolean(data.isAdapted),
+    };
+  } catch {
+    return null;
   }
-  return `Walk one worked example for ${topic} together, then ask the student to try a near-transfer problem.`;
 }
 
 function buildExitProblem(subject: string, topic: string): string {
@@ -230,9 +255,27 @@ function rememberAfterVerify(session: TutorOsSession) {
 }
 
 export const localTutorOs = {
-  startSession(input: { tuteeName: string; subject: string; topic: string }): TutorOsSession {
+  async startSession(input: {
+    tuteeName: string;
+    subject: string;
+    topic: string;
+  }): Promise<TutorOsSession> {
     const tuteeSlug = slugify(input.tuteeName);
     const memory = readMemoryMap()[tuteeSlug] ?? null;
+    const aiBrief = await fetchAiPrepBrief({
+      tuteeName: input.tuteeName,
+      subject: input.subject,
+      topic: input.topic,
+      memory,
+    });
+    const prepBrief =
+      aiBrief ??
+      buildTemplateBrief({
+        tuteeName: input.tuteeName,
+        subject: input.subject,
+        topic: input.topic,
+        memory,
+      });
     const now = new Date().toISOString();
     const session: TutorOsSession = {
       id: crypto.randomUUID(),
@@ -242,12 +285,7 @@ export const localTutorOs = {
       subject: input.subject.trim(),
       topic: input.topic.trim(),
       status: "prep",
-      prepBrief: buildPrepBrief({
-        tuteeName: input.tuteeName,
-        subject: input.subject,
-        topic: input.topic,
-        memory,
-      }),
+      prepBrief,
       startedAt: now,
       exitProblem: buildExitProblem(input.subject, input.topic),
       createdAt: now,
@@ -329,45 +367,5 @@ export const localTutorOs = {
     });
     rememberAfterVerify(updated);
     return updated;
-  },
-
-  getCommandView(): CommandResponse {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const iso = start.toISOString();
-    const sessions = readSessions().filter((s) => s.startedAt >= iso);
-    const flagged = sessions.filter((s) => s.verifyMismatch);
-    const hours =
-      Math.round((sessions.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0) / 60) * 10) / 10;
-
-    return {
-      label: "Tonight — HW Center & Tutorial",
-      sessionsCount: sessions.length,
-      verifiedCount: sessions.filter((s) => s.learningMoment).length,
-      hours,
-      flaggedCount: flagged.length,
-      flagged: flagged.map((s) => ({
-        id: s.id,
-        tuteeName: s.tuteeName,
-        subject: s.subject,
-        topic: s.topic,
-        tutorUsername: s.tutorUsername,
-        verifyScore: s.verifyScore,
-        tutorRubric: s.tutorRubric,
-      })),
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        tuteeName: s.tuteeName,
-        subject: s.subject,
-        topic: s.topic,
-        tutorUsername: s.tutorUsername,
-        status: s.status,
-        learningMoment: s.learningMoment,
-        verifyScore: s.verifyScore,
-        verifyMismatch: s.verifyMismatch,
-        durationMinutes: s.durationMinutes,
-        sessionType: s.sessionType,
-      })),
-    };
   },
 };

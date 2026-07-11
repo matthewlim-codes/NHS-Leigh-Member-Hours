@@ -1,11 +1,10 @@
 import { Router, type IRouter } from "express";
 import { isEverOSConfigured } from "../lib/everos-client";
-import { getTutoringContext, recordTutoringSession } from "../lib/tutor-memory";
+import { recordTutoringSession } from "../lib/tutor-memory";
 import {
   createSession,
   getSession,
   listSessionsForTutor,
-  listTonightSessions,
   rememberAfterVerify,
   scoreVerification,
   updateSession,
@@ -29,6 +28,7 @@ router.get("/tutoros/meta", (_req, res): void => {
     appId: getButterbaseAppId(),
     everosConfigured: isEverOSConfigured(),
     butterbaseConfigured: Boolean(process.env.BUTTERBASE_API_KEY),
+    prepAgent: "llm",
   });
 });
 
@@ -52,24 +52,6 @@ router.post("/tutoros/sessions/start", async (req, res): Promise<void> => {
       subject,
       topic,
     });
-
-    // Optionally enrich prep hints from EverOS when configured
-    if (isEverOSConfigured()) {
-      try {
-        const context = await getTutoringContext(session.tuteeSlug, topic);
-        if (context.prepHints.length > 0 && session.prepBrief.memorySource !== "empty") {
-          session.prepBrief.watchFors = [
-            ...context.prepHints.slice(0, 2),
-            ...session.prepBrief.watchFors,
-          ].slice(0, 4);
-          session.prepBrief.memorySource = "everos";
-          await updateSession(session.id, { prepBrief: session.prepBrief });
-        }
-      } catch {
-        // keep demo brief
-      }
-    }
-
     res.status(201).json(session);
   } catch (error) {
     res.status(500).json({
@@ -259,55 +241,6 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to verify session",
-    });
-  }
-});
-
-router.get("/tutoros/command", async (req, res): Promise<void> => {
-  const username = requireAuth(req, res);
-  if (!username) return;
-
-  try {
-    const sessions = await listTonightSessions();
-    const verified = sessions.filter((s) => s.learningMoment);
-    const flagged = sessions.filter((s) => s.verifyMismatch);
-    const hours =
-      Math.round(
-        (sessions.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0) / 60) * 10,
-      ) / 10;
-
-    res.json({
-      label: "Tonight — HW Center & Tutorial",
-      sessionsCount: sessions.length,
-      verifiedCount: verified.length,
-      hours,
-      flaggedCount: flagged.length,
-      flagged: flagged.map((s) => ({
-        id: s.id,
-        tuteeName: s.tuteeName,
-        subject: s.subject,
-        topic: s.topic,
-        tutorUsername: s.tutorUsername,
-        verifyScore: s.verifyScore,
-        tutorRubric: s.tutorRubric,
-      })),
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        tuteeName: s.tuteeName,
-        subject: s.subject,
-        topic: s.topic,
-        tutorUsername: s.tutorUsername,
-        status: s.status,
-        learningMoment: s.learningMoment,
-        verifyScore: s.verifyScore,
-        verifyMismatch: s.verifyMismatch,
-        durationMinutes: s.durationMinutes,
-        sessionType: s.sessionType,
-      })),
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to load command view",
     });
   }
 });

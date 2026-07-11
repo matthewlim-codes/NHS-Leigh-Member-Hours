@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ClipboardList, Home, PlayCircle, Shield } from "lucide-react";
+import { ClipboardList, Home, PlayCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
@@ -18,12 +18,6 @@ const tabs = [
     label: "History",
     icon: ClipboardList,
     match: (p: string) => p.startsWith("/tutoros/history"),
-  },
-  {
-    href: "/tutoros/command",
-    label: "Command",
-    icon: Shield,
-    match: (p: string) => p.startsWith("/tutoros/command"),
   },
 ] as const;
 
@@ -47,7 +41,7 @@ export function TutorOsShell({
           className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur"
           aria-label="TutorOS"
         >
-          <div className="mx-auto max-w-lg grid grid-cols-5 h-16">
+          <div className="mx-auto max-w-lg grid grid-cols-4 h-16">
             {tabs.map((tab) => {
               const active = tab.match(location);
               const Icon = tab.icon;

@@ -136,7 +136,7 @@ export default function DashboardPage() {
                   </p>
                   <h3 className="mt-1 text-2xl font-display font-bold">Open TutorOS</h3>
                   <p className="mt-1 text-sm text-primary-foreground/85">
-                    Browse subject tracks, bookmark lessons, and prep for HW Center or Tutorial sessions.
+                    Start Session → prep from memory → verify learning in 30 seconds. Hours dashboard stays here.
                   </p>
                 </div>
               </div>

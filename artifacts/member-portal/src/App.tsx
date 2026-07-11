@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import TeacherPortalPage from "@/pages/teacher";
 import TutorOsHomePage from "@/tutoros/pages/home";
 import TutorOsStartPage from "@/tutoros/pages/start";
 import TutorOsSessionPage from "@/tutoros/pages/session";
@@ -18,6 +19,10 @@ const queryClient = new QueryClient();
 
 function isPublicPath(location: string) {
   return location === "/login" || location.startsWith("/tutoros/verify/");
+}
+
+function homeForRole(role?: string) {
+  return role === "teacher" ? "/teacher" : "/tutoros";
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -38,7 +43,24 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     if (isSuccess && user) {
+      const isTeacher = user.role === "teacher";
+
       if (location === "/login" || location === "/") {
+        setLocation(homeForRole(user.role));
+        return;
+      }
+
+      if (isTeacher && location.startsWith("/tutoros")) {
+        setLocation("/teacher");
+        return;
+      }
+
+      if (isTeacher && location === "/dashboard") {
+        setLocation("/teacher");
+        return;
+      }
+
+      if (!isTeacher && location.startsWith("/teacher")) {
         setLocation("/tutoros");
       }
     }
@@ -59,6 +81,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
+      <Route path="/teacher" component={TeacherPortalPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/tutoros/start" component={TutorOsStartPage} />
       <Route path="/tutoros/session/:id" component={TutorOsSessionPage} />

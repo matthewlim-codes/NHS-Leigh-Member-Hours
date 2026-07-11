@@ -1,169 +1,340 @@
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useLogin, useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import {
+  useLogin,
+  useTeacherLogin,
+  useGetMe,
+  getGetMeQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { GraduationCap, School } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const loginSchema = z.object({
+const studentSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+const teacherSchema = z.object({
+  code: z.string().min(1, "Access code is required"),
+});
+
+type StudentFormValues = z.infer<typeof studentSchema>;
+type TeacherFormValues = z.infer<typeof teacherSchema>;
+type RoleChoice = "chooser" | "student" | "teacher";
+
+function homeForRole(role?: string) {
+  return role === "teacher" ? "/teacher" : "/tutoros";
+}
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [roleChoice, setRoleChoice] = useState<RoleChoice>("chooser");
+
   const { data: user, isSuccess } = useGetMe({
     query: {
       queryKey: getGetMeQueryKey(),
-      retry: false
-    }
+      retry: false,
+    },
   });
 
   useEffect(() => {
     if (isSuccess && user) {
-      setLocation("/tutoros");
+      setLocation(homeForRole(user.role));
     }
   }, [isSuccess, user, setLocation]);
 
   const loginMutation = useLogin();
+  const teacherLoginMutation = useTeacherLogin();
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      username: "",
-      password: "",
-    },
+  const studentForm = useForm<StudentFormValues>({
+    resolver: zodResolver(studentSchema),
+    defaultValues: { username: "", password: "" },
   });
 
-  const onSubmit = (values: LoginFormValues) => {
+  const teacherForm = useForm<TeacherFormValues>({
+    resolver: zodResolver(teacherSchema),
+    defaultValues: { code: "" },
+  });
+
+  const onStudentSubmit = (values: StudentFormValues) => {
     loginMutation.mutate(
       { data: values },
       {
         onSuccess: (data) => {
           queryClient.setQueryData(getGetMeQueryKey(), data);
-          setLocation("/tutoros");
+          setLocation(homeForRole(data.role));
         },
-      }
+      },
+    );
+  };
+
+  const onTeacherSubmit = (values: TeacherFormValues) => {
+    teacherLoginMutation.mutate(
+      { data: values },
+      {
+        onSuccess: (data) => {
+          queryClient.setQueryData(getGetMeQueryKey(), data);
+          setLocation(homeForRole(data.role));
+        },
+      },
     );
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-[400px]">
-        <div className="flex flex-col items-center mb-8 text-center">
+    <div className="min-h-[100dvh] relative overflow-hidden bg-[#f6f8fc]">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(24,101,242,0.18), transparent), radial-gradient(ellipse 60% 40% at 100% 100%, rgba(14,165,233,0.12), transparent)",
+        }}
+      />
+
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-lg flex-col justify-center px-5 py-10">
+        <div className="mb-8 text-center">
           <img
             src={`${import.meta.env.BASE_URL}nhs-logo.png`}
             alt="National Honor Society"
-            className="mb-4 h-24 w-auto"
+            className="mx-auto mb-5 h-20 w-auto"
           />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="heading-login">
-            Leigh NHS Member Portal
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1865F2]">
+            Leigh NHS Tutors
+          </p>
+          <h1
+            className="mt-2 font-display text-4xl font-bold tracking-tight text-slate-900"
+            data-testid="heading-login"
+          >
+            TutorOS
           </h1>
-          <p className="text-muted-foreground mt-2" data-testid="text-login-subtitle">
-            Sign in to access TutorOS and your volunteer dashboard
+          <p className="mt-2 text-[15px] text-slate-600" data-testid="text-login-subtitle">
+            Sign in to tutor students or assign tutoring requests
           </p>
         </div>
 
-        <Card className="shadow-lg border-muted/50">
-          <CardHeader>
-            <CardTitle>Welcome back</CardTitle>
-            <CardDescription>Enter your details below to sign in.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loginMutation.isError && (
-              <Alert variant="destructive" className="mb-6" data-testid="alert-login-error">
-                <AlertDescription>
-                  {loginMutation.error?.data?.error || "We couldn't sign you in. Please check your details and try again."}
-                </AlertDescription>
-              </Alert>
-            )}
+        <div className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm backdrop-blur">
+          {roleChoice === "chooser" && (
+            <div className="space-y-5" data-testid="login-role-chooser">
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-slate-900">Are you a student or a teacher?</h2>
+                <p className="mt-1.5 text-sm text-slate-500">
+                  Choose how you want to sign in
+                </p>
+              </div>
 
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Username</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="First-Last" 
-                          autoComplete="username"
-                          autoCapitalize="none"
-                          autoCorrect="off"
-                          {...field} 
-                          data-testid="input-username"
-                        />
-                      </FormControl>
-                      <p className="text-[13px] text-muted-foreground mt-1">
-                        Use your first and last name separated by a hyphen (e.g. Alexander-Hamilton)
-                      </p>
-                      <details className="group mt-1 text-[13px] text-muted-foreground">
-                        <summary className="cursor-pointer font-medium text-primary underline-offset-4 hover:underline">
-                          Exceptions
-                        </summary>
-                        <p className="mt-1">
-                          If you have two last names, format it like First-Last 2ndLast.
-                        </p>
-                      </details>
-                      <FormMessage />
-                    </FormItem>
+              <div className="grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRoleChoice("student")}
+                  className={cn(
+                    "group flex items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white px-4 py-4 text-left transition",
+                    "hover:border-[#1865F2] hover:bg-blue-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1865F2]",
                   )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="password" 
-                          autoComplete="current-password"
-                          placeholder="••••••••" 
-                          {...field} 
-                          data-testid="input-password"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                      <p className="text-[13px] text-muted-foreground mt-1">
-                        Your student ID
-                      </p>
-                    </FormItem>
-                  )}
-                />
-
-                <Button 
-                  type="submit" 
-                  className="w-full text-base font-medium" 
-                  size="lg"
-                  disabled={loginMutation.isPending}
-                  data-testid="button-submit-login"
+                  data-testid="button-choose-student"
                 >
-                  {loginMutation.isPending ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-        
-        <p className="text-center text-sm text-muted-foreground mt-8" data-testid="text-support">
-          Need help signing in? Contact{" "}
-          <a className="text-primary underline-offset-4 hover:underline" href="mailto:562022@my.cuhsd.org">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-[#1865F2] transition group-hover:bg-[#1865F2] group-hover:text-white">
+                    <GraduationCap className="h-6 w-6" />
+                  </span>
+                  <span>
+                    <span className="block text-base font-bold text-slate-900">Student</span>
+                    <span className="block text-sm text-slate-500">
+                      NHS tutors — username &amp; student ID
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRoleChoice("teacher")}
+                  className={cn(
+                    "group flex items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white px-4 py-4 text-left transition",
+                    "hover:border-[#1865F2] hover:bg-blue-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1865F2]",
+                  )}
+                  data-testid="button-choose-teacher"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white">
+                    <School className="h-6 w-6" />
+                  </span>
+                  <span>
+                    <span className="block text-base font-bold text-slate-900">Teacher</span>
+                    <span className="block text-sm text-slate-500">
+                      Assign students who need tutoring
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {roleChoice === "student" && (
+            <div data-testid="login-student-form">
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleChoice("chooser");
+                  loginMutation.reset();
+                }}
+                className="mb-4 text-sm font-semibold text-[#1865F2]"
+              >
+                ← Back
+              </button>
+              <h2 className="text-xl font-bold text-slate-900">Student sign in</h2>
+              <p className="mt-1 text-sm text-slate-500">Use your NHS member credentials</p>
+
+              {loginMutation.isError && (
+                <Alert variant="destructive" className="mt-4" data-testid="alert-login-error">
+                  <AlertDescription>
+                    {loginMutation.error?.data?.error ||
+                      "We couldn't sign you in. Please check your details and try again."}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Form {...studentForm}>
+                <form
+                  onSubmit={studentForm.handleSubmit(onStudentSubmit)}
+                  className="mt-5 space-y-4"
+                >
+                  <FormField
+                    control={studentForm.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="First-Last"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            className="h-12 rounded-xl"
+                            {...field}
+                            data-testid="input-username"
+                          />
+                        </FormControl>
+                        <p className="text-[13px] text-muted-foreground">
+                          First and last name separated by a hyphen
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={studentForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            autoComplete="current-password"
+                            placeholder="Student ID"
+                            className="h-12 rounded-xl"
+                            {...field}
+                            data-testid="input-password"
+                          />
+                        </FormControl>
+                        <p className="text-[13px] text-muted-foreground">Your student ID</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="h-12 w-full rounded-full bg-[#1865F2] text-base font-semibold hover:bg-[#1557d0]"
+                    disabled={loginMutation.isPending}
+                    data-testid="button-submit-login"
+                  >
+                    {loginMutation.isPending ? "Signing in..." : "Sign in"}
+                  </Button>
+                </form>
+              </Form>
+            </div>
+          )}
+
+          {roleChoice === "teacher" && (
+            <div data-testid="login-teacher-form">
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleChoice("chooser");
+                  teacherLoginMutation.reset();
+                }}
+                className="mb-4 text-sm font-semibold text-[#1865F2]"
+              >
+                ← Back
+              </button>
+              <h2 className="text-xl font-bold text-slate-900">Teacher sign in</h2>
+              <p className="mt-1 text-sm text-slate-500">Enter the teacher access code</p>
+
+              {teacherLoginMutation.isError && (
+                <Alert variant="destructive" className="mt-4" data-testid="alert-teacher-login-error">
+                  <AlertDescription>
+                    {teacherLoginMutation.error?.data?.error ||
+                      "Invalid access code. Please try again."}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Form {...teacherForm}>
+                <form
+                  onSubmit={teacherForm.handleSubmit(onTeacherSubmit)}
+                  className="mt-5 space-y-4"
+                >
+                  <FormField
+                    control={teacherForm.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Access code</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            autoComplete="off"
+                            placeholder="Enter code"
+                            className="h-12 rounded-xl"
+                            {...field}
+                            data-testid="input-teacher-code"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="h-12 w-full rounded-full bg-emerald-600 text-base font-semibold hover:bg-emerald-700"
+                    disabled={teacherLoginMutation.isPending}
+                    data-testid="button-submit-teacher-login"
+                  >
+                    {teacherLoginMutation.isPending ? "Signing in..." : "Continue as teacher"}
+                  </Button>
+                </form>
+              </Form>
+            </div>
+          )}
+        </div>
+
+        <p className="mt-8 text-center text-sm text-slate-500" data-testid="text-support">
+          Need help? Contact{" "}
+          <a
+            className="font-medium text-[#1865F2] underline-offset-4 hover:underline"
+            href="mailto:562022@my.cuhsd.org"
+          >
             562022@my.cuhsd.org
-          </a>{" "}
-          with questions
+          </a>
         </p>
       </div>
     </div>

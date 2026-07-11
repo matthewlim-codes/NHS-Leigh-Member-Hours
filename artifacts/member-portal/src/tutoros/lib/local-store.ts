@@ -4,10 +4,13 @@ import type {
   SessionType,
   TutorOsSession,
   TutorRubric,
+  TutoringRequest,
+  TutoringRequestStatus,
 } from "./api";
 
 const SESSIONS_KEY = "tutoros-sessions-v1";
 const MEMORY_KEY = "tutoros-memory-v1";
+const REQUESTS_KEY = "tutoros-requests-v1";
 const PREP_FN_URL = "https://api.butterbase.ai/v1/app_tsc2mvlq21yo/fn/prep-brief";
 
 interface TuteeMemory {
@@ -368,4 +371,78 @@ export const localTutorOs = {
     rememberAfterVerify(updated);
     return updated;
   },
+
+  listTutoringRequests(filter?: {
+    status?: TutoringRequestStatus;
+  }): { requests: TutoringRequest[] } {
+    let requests = readRequests();
+    if (filter?.status) {
+      requests = requests.filter((r) => r.status === filter.status);
+    }
+    return {
+      requests: requests.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    };
+  },
+
+  createTutoringRequest(input: {
+    studentName: string;
+    grade: string;
+    assignedBy: string;
+    subject: string;
+    topic: string;
+    notes?: string;
+  }): TutoringRequest {
+    const now = new Date().toISOString();
+    const request: TutoringRequest = {
+      id: crypto.randomUUID(),
+      studentName: input.studentName.trim(),
+      grade: input.grade.trim(),
+      assignedBy: input.assignedBy.trim(),
+      subject: input.subject.trim(),
+      topic: input.topic.trim(),
+      notes: input.notes?.trim() || null,
+      status: "open",
+      claimedByUsername: null,
+      claimedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const all = readRequests();
+    all.unshift(request);
+    writeRequests(all);
+    return request;
+  },
+
+  claimTutoringRequest(id: string): TutoringRequest {
+    const all = readRequests();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx < 0 || all[idx].status !== "open") {
+      throw new Error("Open request not found");
+    }
+    const now = new Date().toISOString();
+    all[idx] = {
+      ...all[idx],
+      status: "claimed",
+      claimedByUsername: "local-tutor",
+      claimedAt: now,
+      updatedAt: now,
+    };
+    writeRequests(all);
+    return all[idx];
+  },
 };
+
+function readRequests(): TutoringRequest[] {
+  try {
+    const raw = localStorage.getItem(REQUESTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TutoringRequest[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRequests(requests: TutoringRequest[]) {
+  localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
+}

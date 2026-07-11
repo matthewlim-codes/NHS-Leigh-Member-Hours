@@ -9,18 +9,48 @@ import {
   scoreVerification,
   updateSession,
   getButterbaseAppId,
+  createTutoringRequest,
+  listTutoringRequests,
+  claimTutoringRequest,
+  completeTutoringRequest,
   type SessionType,
   type TutorRubric,
 } from "../lib/tutoros-store";
 
 const router: IRouter = Router();
 
-function requireAuth(req: { session: { userId?: number; username?: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }): string | null {
+function requireAuth(req: {
+  session: { userId?: number; username?: string; role?: string };
+}, res: { status: (n: number) => { json: (b: unknown) => void } }): string | null {
   if (!req.session.userId || !req.session.username) {
     res.status(401).json({ error: "Not authenticated" });
     return null;
   }
   return req.session.username;
+}
+
+function requireTeacher(req: {
+  session: { userId?: number; username?: string; role?: string };
+}, res: { status: (n: number) => { json: (b: unknown) => void } }): string | null {
+  const username = requireAuth(req, res);
+  if (!username) return null;
+  if (req.session.role !== "teacher") {
+    res.status(403).json({ error: "Teacher access required" });
+    return null;
+  }
+  return username;
+}
+
+function requireMember(req: {
+  session: { userId?: number; username?: string; role?: string };
+}, res: { status: (n: number) => { json: (b: unknown) => void } }): string | null {
+  const username = requireAuth(req, res);
+  if (!username) return null;
+  if (req.session.role === "teacher") {
+    res.status(403).json({ error: "Tutor / member access required" });
+    return null;
+  }
+  return username;
 }
 
 router.get("/tutoros/meta", (_req, res): void => {
@@ -33,7 +63,7 @@ router.get("/tutoros/meta", (_req, res): void => {
 });
 
 router.post("/tutoros/sessions/start", async (req, res): Promise<void> => {
-  const username = requireAuth(req, res);
+  const username = requireMember(req, res);
   if (!username) return;
 
   const tuteeName = typeof req.body?.tuteeName === "string" ? req.body.tuteeName.trim() : "";
@@ -241,6 +271,104 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to verify session",
+    });
+  }
+});
+
+router.get("/tutoros/requests", async (req, res): Promise<void> => {
+  const username = requireAuth(req, res);
+  if (!username) return;
+
+  try {
+    const status =
+      req.query.status === "open" || req.query.status === "claimed" || req.query.status === "done"
+        ? req.query.status
+        : undefined;
+
+    // Teachers see all (or filtered); tutors default to open queue unless filtered
+    const effectiveStatus =
+      req.session.role === "teacher"
+        ? status
+        : status ?? "open";
+
+    const requests = await listTutoringRequests(
+      effectiveStatus ? { status: effectiveStatus } : undefined,
+    );
+    res.json({ requests });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list requests",
+    });
+  }
+});
+
+router.post("/tutoros/requests", async (req, res): Promise<void> => {
+  const username = requireTeacher(req, res);
+  if (!username) return;
+
+  const studentName = typeof req.body?.studentName === "string" ? req.body.studentName.trim() : "";
+  const grade = typeof req.body?.grade === "string" ? req.body.grade.trim() : "";
+  const assignedBy = typeof req.body?.assignedBy === "string" ? req.body.assignedBy.trim() : "";
+  const subject = typeof req.body?.subject === "string" ? req.body.subject.trim() : "";
+  const topic = typeof req.body?.topic === "string" ? req.body.topic.trim() : "";
+  const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
+
+  if (!studentName || !grade || !assignedBy || !subject || !topic) {
+    res.status(400).json({
+      error: "studentName, grade, assignedBy, subject, and topic are required",
+    });
+    return;
+  }
+
+  try {
+    const request = await createTutoringRequest({
+      studentName,
+      grade,
+      assignedBy,
+      subject,
+      topic,
+      notes,
+    });
+    res.status(201).json(request);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to create request",
+    });
+  }
+});
+
+router.post("/tutoros/requests/:id/claim", async (req, res): Promise<void> => {
+  const username = requireMember(req, res);
+  if (!username) return;
+
+  try {
+    const claimed = await claimTutoringRequest(req.params.id, username);
+    if (!claimed) {
+      res.status(404).json({ error: "Open request not found" });
+      return;
+    }
+    res.json(claimed);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to claim request",
+    });
+  }
+});
+
+router.post("/tutoros/requests/:id/complete", async (req, res): Promise<void> => {
+  const username = requireAuth(req, res);
+  if (!username) return;
+
+  try {
+    const done = await completeTutoringRequest(req.params.id);
+    if (!done) {
+      res.status(404).json({ error: "Request not found" });
+      return;
+    }
+    res.json(done);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to complete request",
     });
   }
 });

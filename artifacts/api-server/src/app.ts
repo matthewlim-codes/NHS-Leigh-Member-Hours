@@ -50,8 +50,8 @@ app.use(
   }),
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required");
@@ -75,6 +75,17 @@ app.use(
 );
 
 app.use("/api", router);
+
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const error = err as { type?: string; status?: number; message?: string };
+  if (error?.type === "entity.too.large" || error?.status === 413) {
+    res.status(413).json({
+      error: "File too large to upload. Please use an image or document under 10 MB.",
+    });
+    return;
+  }
+  next(err);
+});
 
 logger.info(
   {

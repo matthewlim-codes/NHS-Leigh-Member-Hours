@@ -144,14 +144,27 @@ export default function TeacherPortalPage() {
     setUploadingMaterial(true);
     setError(null);
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
-      const contentBase64 = btoa(binary);
+      const maxBytes = 10 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        throw new Error("File must be under 10 MB. Try a smaller PNG or JPEG.");
+      }
+
+      const contentBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result ?? "");
+          const comma = result.indexOf(",");
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(new Error("Could not read that file. Try another PNG/JPEG."));
+        reader.readAsDataURL(file);
+      });
+
       const isText =
         file.type.startsWith("text/") ||
         /\.(txt|md|csv|tsv|html?|rtf|json|log)$/i.test(file.name);
+      const text = isText ? await file.text() : undefined;
+
       await uploadCourseMaterial({
         filename: file.name,
         subject: materialSubject,
@@ -159,7 +172,7 @@ export default function TeacherPortalPage() {
         teacherInstructions: teacherInstructions.trim() || undefined,
         contentBase64,
         contentType: file.type || "application/octet-stream",
-        text: isText ? new TextDecoder().decode(bytes) : undefined,
+        text,
       });
       setTeacherInstructions("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -287,6 +300,15 @@ export default function TeacherPortalPage() {
                 <Upload className="h-4 w-4" />
                 {uploadingMaterial ? "Uploading…" : "Upload file"}
               </button>
+
+              {error && (
+                <p
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                  data-testid="text-material-upload-error"
+                >
+                  {error}
+                </p>
+              )}
             </form>
 
             {materials.length > 0 && (

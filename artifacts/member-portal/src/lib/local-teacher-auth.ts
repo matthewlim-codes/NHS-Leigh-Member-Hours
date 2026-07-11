@@ -17,20 +17,31 @@ export function isValidTeacherCode(code: string): boolean {
   return normalizeTeacherCode(code) === TEACHER_ACCESS_CODE;
 }
 
+let _cachedRaw: string | null = null;
+let _cachedUser: AuthUser | null = null;
+
 export function getLocalTeacherUser(): AuthUser | null {
   try {
-    const raw = sessionStorage.getItem(LOCAL_TEACHER_KEY);
-    if (!raw) return null;
+    const raw = sessionStorage.getItem(LOCAL_TEACHER_KEY) ?? null;
+    if (raw === _cachedRaw) return _cachedUser;
+    _cachedRaw = raw;
+    if (!raw) {
+      _cachedUser = null;
+      return null;
+    }
     const parsed = JSON.parse(raw) as AuthUser;
     if (parsed?.role === "teacher" && typeof parsed.username === "string") {
-      return {
+      _cachedUser = {
         id: typeof parsed.id === "number" ? parsed.id : -1,
         username: parsed.username,
         role: "teacher",
       };
+      return _cachedUser;
     }
+    _cachedUser = null;
     return null;
   } catch {
+    _cachedUser = null;
     return null;
   }
 }

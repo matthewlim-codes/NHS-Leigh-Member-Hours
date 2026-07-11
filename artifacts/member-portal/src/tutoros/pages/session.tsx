@@ -27,6 +27,8 @@ import {
   type TutorOsSession,
   type TutorRubric,
 } from "../lib/api";
+import { ScalePicker } from "../components/scale-picker";
+import { emptyTutorEvidence } from "../lib/evidence-types";
 
 export default function TutorOsSessionPage() {
   const params = useParams<{ id: string }>();
@@ -42,6 +44,7 @@ export default function TutorOsSessionPage() {
   const [showRubric, setShowRubric] = useState(false);
   const [generatingProblems, setGeneratingProblems] = useState(false);
   const [savingProblems, setSavingProblems] = useState(false);
+  const [tutorEvidence, setTutorEvidence] = useState(emptyTutorEvidence());
   const saveProblemsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -125,8 +128,14 @@ export default function TutorOsSessionPage() {
     };
   }, []);
 
+  const tutorEvidenceComplete =
+    tutorEvidence.todaysGoal.trim().length > 0 &&
+    tutorEvidence.biggestMisconception.trim().length > 0 &&
+    tutorEvidence.whatClicked.trim().length > 0 &&
+    tutorEvidence.whatChangedToday.trim().length > 0;
+
   const onEnd = async () => {
-    if (!session || !rubric || !session.startedAt) return;
+    if (!session || !rubric || !session.startedAt || !tutorEvidenceComplete) return;
     setEnding(true);
     setError(null);
     try {
@@ -138,6 +147,13 @@ export default function TutorOsSessionPage() {
         tutorRubric: rubric,
         sessionType,
         durationMinutes: mins,
+        tutorEvidence: {
+          ...tutorEvidence,
+          todaysGoal: tutorEvidence.todaysGoal.trim(),
+          biggestMisconception: tutorEvidence.biggestMisconception.trim(),
+          whatClicked: tutorEvidence.whatClicked.trim(),
+          whatChangedToday: tutorEvidence.whatChangedToday.trim(),
+        },
       });
       setLocation(`/tutoros/verify/${updated.id}`);
     } catch (err) {
@@ -243,6 +259,76 @@ export default function TutorOsSessionPage() {
               ))}
             </div>
 
+            <div className="border-t border-slate-100 pt-4 space-y-4">
+              <div>
+                <h4 className="font-bold text-slate-900">Evidence fusion</h4>
+                <p className="mt-1 text-sm text-slate-600">
+                  Small signals beat one big summary — AI combines these for the next prep brief.
+                </p>
+              </div>
+
+              <label className="block space-y-1.5">
+                <span className="text-sm font-semibold text-slate-800">What was today&apos;s goal?</span>
+                <input
+                  value={tutorEvidence.todaysGoal}
+                  onChange={(e) =>
+                    setTutorEvidence((ev) => ({ ...ev, todaysGoal: e.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+                  placeholder="Factor quadratics without hints"
+                />
+              </label>
+
+              <label className="block space-y-1.5">
+                <span className="text-sm font-semibold text-slate-800">Biggest misconception?</span>
+                <input
+                  value={tutorEvidence.biggestMisconception}
+                  onChange={(e) =>
+                    setTutorEvidence((ev) => ({ ...ev, biggestMisconception: e.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+                  placeholder="Thought factors had to match the middle term exactly"
+                />
+              </label>
+
+              <label className="block space-y-1.5">
+                <span className="text-sm font-semibold text-slate-800">What finally clicked?</span>
+                <input
+                  value={tutorEvidence.whatClicked}
+                  onChange={(e) =>
+                    setTutorEvidence((ev) => ({ ...ev, whatClicked: e.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+                  placeholder="Box method made the pairs visual"
+                />
+              </label>
+
+              <ScalePicker
+                label="Independence (1–5)"
+                value={tutorEvidence.independence}
+                onChange={(independence) =>
+                  setTutorEvidence((ev) => ({ ...ev, independence }))
+                }
+                lowLabel="Needs help"
+                highLabel="Independent"
+              />
+
+              <label className="block space-y-1.5 rounded-xl border border-[#1865F2]/30 bg-blue-50/50 p-3">
+                <span className="text-sm font-bold text-[#1865F2]">What changed today?</span>
+                <p className="text-xs text-slate-600">
+                  Not what happened — what shifted in their learning?
+                </p>
+                <input
+                  value={tutorEvidence.whatChangedToday}
+                  onChange={(e) =>
+                    setTutorEvidence((ev) => ({ ...ev, whatChangedToday: e.target.value }))
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+                  placeholder="Jordan no longer needs hints for GCF"
+                />
+              </label>
+            </div>
+
             <p className="text-sm font-semibold text-slate-800">Session type</p>
             <div className="grid grid-cols-2 gap-2">
               {(
@@ -266,7 +352,7 @@ export default function TutorOsSessionPage() {
               ))}
             </div>
 
-            <PrimaryButton onClick={onEnd} disabled={!rubric || ending}>
+            <PrimaryButton onClick={onEnd} disabled={!rubric || !tutorEvidenceComplete || ending}>
               {ending ? "Saving…" : "Hand phone to student → Verify"}
             </PrimaryButton>
             <SecondaryButton onClick={() => setShowRubric(false)}>Back</SecondaryButton>

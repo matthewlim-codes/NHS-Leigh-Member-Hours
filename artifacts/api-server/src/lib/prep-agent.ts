@@ -50,7 +50,7 @@ function memoryContext(memory: TuteeMemory | null): string {
       : "unknown";
   const episodes = memory.episodes
     .slice(0, 4)
-    .map((e, i) => `${i + 1}. [${e.topic}] ${e.summary}`)
+    .map((e, i) => `${i + 1}. [${e.topic}] ${e.headline ?? e.summary}`)
     .join("\n");
   return [
     `Preferred approach: ${approach}`,

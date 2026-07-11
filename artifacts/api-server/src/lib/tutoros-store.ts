@@ -4,6 +4,12 @@
  */
 
 import {
+  fuseEvidence,
+  type StudentEvidence,
+  type TeacherEvidence,
+  type TutorEvidence,
+} from "./evidence-fusion";
+import {
   buildDemoTuteeMemoryMap,
   DEMO_TUTORING_REQUESTS,
   slugifyTutee,
@@ -74,6 +80,10 @@ export interface TutorOsSession {
   learningMoment?: boolean;
   exitProblem?: string | null;
   memoryNotes?: Record<string, unknown> | null;
+  tutorEvidence?: TutorEvidence | null;
+  studentEvidence?: StudentEvidence | null;
+  teacherEvidence?: TeacherEvidence | null;
+  fusedHeadline?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,10 +100,12 @@ export interface TuteeMemory {
   episodes: Array<{
     topic: string;
     summary: string;
+    headline?: string;
     outcome?: string;
     approach?: string;
     when?: string;
     score?: number;
+    signals?: Record<string, unknown>;
   }>;
 }
 
@@ -163,6 +175,10 @@ function mapSessionRow(row: Record<string, unknown>): TutorOsSession {
     learningMoment: Boolean(row.learning_moment),
     exitProblem: (row.exit_problem as string | null) ?? null,
     memoryNotes: (row.memory_notes as Record<string, unknown> | null) ?? null,
+    tutorEvidence: (row.tutor_evidence as TutorEvidence | null) ?? null,
+    studentEvidence: (row.student_evidence as StudentEvidence | null) ?? null,
+    teacherEvidence: (row.teacher_evidence as TeacherEvidence | null) ?? null,
+    fusedHeadline: (row.fused_headline as string | null) ?? null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at ?? row.created_at),
   };
@@ -317,7 +333,7 @@ export function buildPrepBrief(input: {
     ],
     contextTitle: "Last session review",
     contextBullets: [
-      `Last time: ${episode.summary}`,
+      `What changed: ${episode.headline ?? episode.summary}`,
       `Strategy that helped: ${preferred}`,
       episode.outcome === "improved"
         ? "What worked: visual structure kept them on track."
@@ -553,6 +569,10 @@ export async function updateSession(
         learning_moment: updated.learningMoment,
         exit_problem: updated.exitProblem,
         memory_notes: updated.memoryNotes,
+        tutor_evidence: updated.tutorEvidence,
+        student_evidence: updated.studentEvidence,
+        teacher_evidence: updated.teacherEvidence,
+        fused_headline: updated.fusedHeadline,
         prep_brief: updated.prepBrief,
         updated_at: updated.updatedAt,
       }),
@@ -628,7 +648,7 @@ export async function listSessionsForTutor(tutorUsername: string): Promise<Tutor
 }
 
 export async function rememberAfterVerify(session: TutorOsSession): Promise<void> {
-  if (session.verifyScore == null) return;
+  if (session.verifyScore == null && !session.tutorEvidence) return;
 
   const existing =
     (await getTuteeMemory(session.tuteeSlug)) ??
@@ -639,25 +659,41 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
       episodes: [],
     } satisfies TuteeMemory);
 
-  const approach =
-    session.prepBrief.isAdapted || session.verifyScore >= 4
-      ? session.prepBrief.recommendedApproach
-      : "needs follow-up";
+  const fused = fuseEvidence({
+    subject: session.subject,
+    topic: session.topic,
+    tutorEvidence: session.tutorEvidence,
+    studentEvidence: session.studentEvidence,
+    teacherEvidence: session.teacherEvidence,
+    verifyScore: session.verifyScore,
+    tutorRubric: session.tutorRubric,
+  });
 
   const episode = {
     topic: session.topic,
-    summary: `Session on ${session.subject} / ${session.topic}. Verify score ${session.verifyScore}/5. Approach: ${approach}`,
-    outcome: session.verifyScore >= 4 ? "improved" : session.verifyScore >= 3 ? "partial" : "struggled",
-    approach: session.prepBrief.isAdapted ? "box method / visual" : "initial",
-    when: new Date().toISOString(),
-    score: session.verifyScore,
+    summary: fused.summary,
+    headline: fused.headline,
+    outcome: fused.outcome,
+    approach: fused.approach ?? (session.prepBrief.isAdapted ? "box method / visual" : "initial"),
+    when: fused.when,
+    score: session.verifyScore ?? undefined,
+    signals: fused.signals as Record<string, unknown>,
   };
 
   const skills = Array.isArray(existing.profile.skills)
     ? [...existing.profile.skills]
     : [];
-  if (session.verifyScore >= 4) {
+  if (session.verifyScore != null && session.verifyScore >= 4) {
     skills.unshift(`factors ${session.topic} with guidance`);
+  } else if (session.tutorEvidence?.whatChangedToday) {
+    skills.unshift(session.tutorEvidence.whatChangedToday.slice(0, 80));
+  }
+
+  const newStruggles: string[] = [];
+  if (session.studentEvidence?.stillConfusing) {
+    newStruggles.push(session.studentEvidence.stillConfusing);
+  } else if (session.tutorEvidence?.biggestMisconception) {
+    newStruggles.push(session.tutorEvidence.biggestMisconception);
   }
 
   const next: TuteeMemory = {
@@ -666,19 +702,27 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
     profile: {
       ...existing.profile,
       preferredApproach:
-        session.verifyScore >= 3
-          ? "visual / box method"
+        session.verifyScore != null && session.verifyScore >= 3
+          ? session.tutorEvidence?.whatClicked ?? "visual / box method"
           : existing.profile.preferredApproach ?? "visual / box method",
       skills: skills.slice(0, 8),
       struggles:
-        session.verifyScore <= 2
+        session.verifyScore != null && session.verifyScore <= 2
           ? [
               ...(Array.isArray(existing.profile.struggles)
                 ? existing.profile.struggles.map(String)
                 : []),
+              ...newStruggles,
               `Still developing ${session.topic}`,
             ].slice(0, 6)
-          : existing.profile.struggles,
+          : newStruggles.length > 0
+            ? [
+                ...(Array.isArray(existing.profile.struggles)
+                  ? existing.profile.struggles.map(String)
+                  : []),
+                ...newStruggles,
+              ].slice(0, 6)
+            : existing.profile.struggles,
     },
     episodes: [episode, ...existing.episodes].slice(0, 20),
   };
@@ -696,6 +740,7 @@ export interface TutoringRequest {
   subject: string;
   topic: string;
   notes?: string | null;
+  whatChangedToday?: string | null;
   status: TutoringRequestStatus;
   claimedByUsername?: string | null;
   claimedAt?: string | null;
@@ -786,12 +831,16 @@ export async function claimTutoringRequest(
   return updated;
 }
 
-export async function completeTutoringRequest(id: string): Promise<TutoringRequest | null> {
+export async function completeTutoringRequest(
+  id: string,
+  input?: { whatChangedToday?: string },
+): Promise<TutoringRequest | null> {
   const existing = requestFallback.get(id);
   if (!existing) return null;
   const updated: TutoringRequest = {
     ...existing,
     status: "done",
+    whatChangedToday: input?.whatChangedToday?.trim() || existing.whatChangedToday,
     updatedAt: new Date().toISOString(),
   };
   requestFallback.set(id, updated);

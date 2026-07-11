@@ -4,6 +4,7 @@ import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, LogOut, Users } from "lucide-react";
 import {
+  completeTutoringRequest,
   createTutoringRequest,
   listTutoringRequests,
   type TutoringRequest,
@@ -45,6 +46,9 @@ export default function TeacherPortalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "open" | "claimed" | "done">("all");
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [whatChangedToday, setWhatChangedToday] = useState("");
+  const [completing, setCompleting] = useState(false);
 
   const refresh = async () => {
     try {
@@ -87,6 +91,22 @@ export default function TeacherPortalPage() {
       setError(err instanceof Error ? err.message : "Could not create request");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onCompleteRequest = async (id: string) => {
+    if (!whatChangedToday.trim()) return;
+    setCompleting(true);
+    setError(null);
+    try {
+      await completeTutoringRequest(id, { whatChangedToday: whatChangedToday.trim() });
+      setCompletingId(null);
+      setWhatChangedToday("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not complete request");
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -308,9 +328,63 @@ export default function TeacherPortalPage() {
                           Claimed by {req.claimedByUsername}
                         </p>
                       )}
+                      {req.whatChangedToday && (
+                        <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-[#1865F2]">
+                          What changed: {req.whatChangedToday}
+                        </p>
+                      )}
                     </div>
-                    <StatusBadge status={req.status} />
+                    <div className="flex flex-col items-end gap-2">
+                      <StatusBadge status={req.status} />
+                      {req.status === "claimed" && completingId !== req.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompletingId(req.id);
+                            setWhatChangedToday("");
+                          }}
+                          className="rounded-full border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                        >
+                          Mark complete
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {completingId === req.id && (
+                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                      <label className="block space-y-1.5">
+                        <span className="text-sm font-bold text-emerald-800">
+                          What changed today?
+                        </span>
+                        <p className="text-xs text-slate-600">
+                          Not what happened — what shifted in this student&apos;s learning?
+                        </p>
+                        <input
+                          value={whatChangedToday}
+                          onChange={(e) => setWhatChangedToday(e.target.value)}
+                          className="h-11 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-emerald-600"
+                          placeholder="Ready for quadratics now"
+                        />
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={completing || !whatChangedToday.trim()}
+                          onClick={() => void onCompleteRequest(req.id)}
+                          className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          {completing ? "Saving…" : "Complete request"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCompletingId(null)}
+                          className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

@@ -639,6 +639,66 @@ export interface TutoringRequest {
 
 const requestFallback = new Map<string, TutoringRequest>();
 
+const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
+
+/** Demo open requests teachers would post for tutors to claim. */
+export const TEMPLATE_TUTORING_REQUESTS: TutoringRequest[] = [
+  {
+    id: "template-math-im2-jordan",
+    studentName: "Jordan Lee",
+    grade: "10",
+    assignedBy: "Ms. Patel · IM2 Period 2",
+    subject: "Algebra II / IM2",
+    topic: "factoring",
+    notes: "Needs help factoring quadratics before the unit quiz. Prefers worked examples.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: TEMPLATE_CREATED_AT,
+    updatedAt: TEMPLATE_CREATED_AT,
+  },
+  {
+    id: "template-chem-honors-sam",
+    studentName: "Sam Nguyen",
+    grade: "11",
+    assignedBy: "Mr. Ortiz · Chemistry Honors",
+    subject: "Chemistry Honors",
+    topic: "periodic trends",
+    notes:
+      "Struggles with electronegativity, atomic radius, and ionization energy across the periodic table.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: "2026-07-11T16:05:00.000Z",
+    updatedAt: "2026-07-11T16:05:00.000Z",
+  },
+  {
+    id: "template-english-maya",
+    studentName: "Maya Brooks",
+    grade: "9",
+    assignedBy: "Ms. Rivera · English 9",
+    subject: "English",
+    topic: "essay writing · passive vs active voice",
+    notes:
+      "Essay drafts lean on passive voice. Needs grammar rules and practice rewriting sentences in active voice.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: "2026-07-11T16:10:00.000Z",
+    updatedAt: "2026-07-11T16:10:00.000Z",
+  },
+];
+
+function seedTemplateRequests() {
+  for (const request of TEMPLATE_TUTORING_REQUESTS) {
+    if (!requestFallback.has(request.id)) {
+      requestFallback.set(request.id, { ...request });
+    }
+  }
+}
+
+seedTemplateRequests();
+
 export async function createTutoringRequest(input: {
   studentName: string;
   grade: string;

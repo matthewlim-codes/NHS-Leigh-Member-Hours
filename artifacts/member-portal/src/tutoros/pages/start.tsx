@@ -5,11 +5,12 @@ import { startSession } from "../lib/api";
 
 const SUBJECTS = [
   "Algebra I",
-  "Algebra II",
+  "Algebra II / IM2",
   "Geometry",
   "Precalculus",
   "Biology",
   "Chemistry",
+  "Chemistry Honors",
   "English",
   "Digital SAT Math",
 ];
@@ -33,7 +34,7 @@ export default function TutorOsStartPage() {
 
   const [tuteeName, setTuteeName] = useState(prefill.tutee || "Maria");
   const [subject, setSubject] = useState(
-    SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II",
+    SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II / IM2",
   );
   const [topic, setTopic] = useState(prefill.topic || "factoring");
   const [loading, setLoading] = useState(false);

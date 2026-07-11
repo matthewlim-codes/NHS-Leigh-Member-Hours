@@ -13,6 +13,56 @@ const MEMORY_KEY = "tutoros-memory-v1";
 const REQUESTS_KEY = "tutoros-requests-v1";
 const PREP_FN_URL = "https://api.butterbase.ai/v1/app_tsc2mvlq21yo/fn/prep-brief";
 
+const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
+
+/** Demo open requests teachers would post for tutors to claim. */
+const TEMPLATE_TUTORING_REQUESTS: TutoringRequest[] = [
+  {
+    id: "template-math-im2-jordan",
+    studentName: "Jordan Lee",
+    grade: "10",
+    assignedBy: "Ms. Patel · IM2 Period 2",
+    subject: "Algebra II / IM2",
+    topic: "factoring",
+    notes: "Needs help factoring quadratics before the unit quiz. Prefers worked examples.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: TEMPLATE_CREATED_AT,
+    updatedAt: TEMPLATE_CREATED_AT,
+  },
+  {
+    id: "template-chem-honors-sam",
+    studentName: "Sam Nguyen",
+    grade: "11",
+    assignedBy: "Mr. Ortiz · Chemistry Honors",
+    subject: "Chemistry Honors",
+    topic: "periodic trends",
+    notes:
+      "Struggles with electronegativity, atomic radius, and ionization energy across the periodic table.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: "2026-07-11T16:05:00.000Z",
+    updatedAt: "2026-07-11T16:05:00.000Z",
+  },
+  {
+    id: "template-english-maya",
+    studentName: "Maya Brooks",
+    grade: "9",
+    assignedBy: "Ms. Rivera · English 9",
+    subject: "English",
+    topic: "essay writing · passive vs active voice",
+    notes:
+      "Essay drafts lean on passive voice. Needs grammar rules and practice rewriting sentences in active voice.",
+    status: "open",
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: "2026-07-11T16:10:00.000Z",
+    updatedAt: "2026-07-11T16:10:00.000Z",
+  },
+];
+
 interface TuteeMemory {
   tuteeSlug: string;
   tuteeName: string;
@@ -499,12 +549,31 @@ export const localTutorOs = {
 function readRequests(): TutoringRequest[] {
   try {
     const raw = localStorage.getItem(REQUESTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as TutoringRequest[];
-    return Array.isArray(parsed) ? parsed : [];
+    let parsed: TutoringRequest[] = [];
+    if (raw) {
+      const value = JSON.parse(raw) as TutoringRequest[];
+      parsed = Array.isArray(value) ? value : [];
+    }
+    return ensureTemplateRequests(parsed);
   } catch {
-    return [];
+    return ensureTemplateRequests([]);
   }
+}
+
+function ensureTemplateRequests(existing: TutoringRequest[]): TutoringRequest[] {
+  const byId = new Map(existing.map((r) => [r.id, r]));
+  let changed = false;
+  for (const template of TEMPLATE_TUTORING_REQUESTS) {
+    if (!byId.has(template.id)) {
+      byId.set(template.id, { ...template });
+      changed = true;
+    }
+  }
+  const merged = Array.from(byId.values());
+  if (changed || !localStorage.getItem(REQUESTS_KEY)) {
+    writeRequests(merged);
+  }
+  return merged;
 }
 
 function writeRequests(requests: TutoringRequest[]) {

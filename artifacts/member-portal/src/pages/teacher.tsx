@@ -12,11 +12,12 @@ import { useAuthUser, logoutLocalTeacher } from "@/hooks/use-auth-user";
 
 const SUBJECTS = [
   "Algebra I",
-  "Algebra II",
+  "Algebra II / IM2",
   "Geometry",
   "Precalculus",
   "Biology",
   "Chemistry",
+  "Chemistry Honors",
   "English",
   "Digital SAT Math",
 ];
@@ -27,7 +28,7 @@ const emptyForm = {
   studentName: "",
   grade: "10",
   assignedBy: "",
-  subject: "Algebra II",
+  subject: "Algebra II / IM2",
   topic: "",
   notes: "",
 };

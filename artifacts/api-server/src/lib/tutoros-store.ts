@@ -16,7 +16,9 @@ export interface PrepBrief {
   recommendedApproach: string;
   workedExample: string;
   watchFors: string[];
-  memorySource: "everos" | "demo" | "empty";
+  /** Natural-language coaching paragraph from the LLM prep agent */
+  coachNote?: string;
+  memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
 
@@ -352,12 +354,12 @@ export async function createSession(input: {
   topic: string;
 }): Promise<TutorOsSession> {
   const tuteeSlug = slugify(input.tuteeName);
-  const memory = await getTuteeMemory(tuteeSlug);
-  const prepBrief = buildPrepBrief({
+  const { generatePrepBrief } = await import("./prep-agent");
+  const prepBrief = await generatePrepBrief({
     tuteeName: input.tuteeName,
     subject: input.subject,
     topic: input.topic,
-    memory,
+    tuteeSlug,
   });
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -478,25 +480,6 @@ export async function listSessionsForTutor(tutorUsername: string): Promise<Tutor
   }
   return [...sessionFallback.values()]
     .filter((s) => s.tutorUsername === tutorUsername)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-}
-
-export async function listTonightSessions(): Promise<TutorOsSession[]> {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const iso = start.toISOString();
-  try {
-    const data = await bbFetch(
-      `/data/sessions?started_at=gte.${encodeURIComponent(iso)}&order=started_at.desc&limit=100`,
-    );
-    if (Array.isArray(data)) {
-      return data.map((row) => mapSessionRow(row as Record<string, unknown>));
-    }
-  } catch {
-    // fallback
-  }
-  return [...sessionFallback.values()]
-    .filter((s) => s.startedAt >= iso)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 

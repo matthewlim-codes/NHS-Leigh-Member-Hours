@@ -83,7 +83,6 @@ logger.info(
       "GET /api/tutoros/meta",
       "POST /api/tutoros/sessions/start",
       "GET /api/tutoros/sessions",
-      "GET /api/tutoros/command",
     ],
   },
   "TutorOS API routes mounted",

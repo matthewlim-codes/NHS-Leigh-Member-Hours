@@ -1,5 +1,3 @@
-import { localTutorOs } from "./local-store";
-
 export type SessionStatus = "prep" | "active" | "awaiting_verify" | "verified" | "logged";
 export type TutorRubric = "independent" | "with_hints" | "not_yet";
 export type SessionType = "hw_center" | "tutorial";
@@ -9,7 +7,8 @@ export interface PrepBrief {
   recommendedApproach: string;
   workedExample: string;
   watchFors: string[];
-  memorySource: "everos" | "demo" | "empty";
+  coachNote?: string;
+  memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
 
@@ -48,35 +47,7 @@ export interface SessionListResponse {
   };
 }
 
-export interface CommandResponse {
-  label: string;
-  sessionsCount: number;
-  verifiedCount: number;
-  hours: number;
-  flaggedCount: number;
-  flagged: Array<{
-    id: string;
-    tuteeName: string;
-    subject: string;
-    topic: string;
-    tutorUsername: string;
-    verifyScore?: number | null;
-    tutorRubric?: string | null;
-  }>;
-  sessions: Array<{
-    id: string;
-    tuteeName: string;
-    subject: string;
-    topic: string;
-    tutorUsername: string;
-    status: SessionStatus;
-    learningMoment?: boolean;
-    verifyScore?: number | null;
-    verifyMismatch?: boolean;
-    durationMinutes?: number | null;
-    sessionType?: SessionType | null;
-  }>;
-}
+import { localTutorOs } from "./local-store";
 
 type ApiMode = "unknown" | "server" | "local";
 
@@ -101,7 +72,7 @@ async function detectServerSupport(): Promise<boolean> {
       return false;
     }
   } catch {
-    // fall through — try the real request path
+    // fall through
   }
   return true;
 }
@@ -142,24 +113,21 @@ class RouteMissingError extends Error {
   }
 }
 
-async function withFallback<T>(serverCall: () => Promise<T>, localCall: () => T): Promise<T> {
+async function withFallback<T>(serverCall: () => Promise<T>, localCall: () => Promise<T> | T): Promise<T> {
   const preferServer = await detectServerSupport();
   if (!preferServer) {
-    return localCall();
+    return await localCall();
   }
 
   try {
     return await serverCall();
   } catch (error) {
     if (error instanceof RouteMissingError || apiMode === "local") {
-      return localCall();
+      return await localCall();
     }
-    // If the server literally doesn't have TutorOS yet, Express returns HTML 404
-    // and JSON parse yields {} — RouteMissingError covers that. Network failures
-    // also fall back so demos keep working.
     if (error instanceof TypeError) {
       apiMode = "local";
-      return localCall();
+      return await localCall();
     }
     throw error;
   }
@@ -223,12 +191,5 @@ export function verifySession(id: string, input: { explanation: string; answer: 
         body: JSON.stringify(input),
       }),
     () => localTutorOs.verifySession(id, input),
-  );
-}
-
-export function getCommandView() {
-  return withFallback(
-    () => api<CommandResponse>("/tutoros/command"),
-    () => localTutorOs.getCommandView(),
   );
 }

@@ -13,7 +13,6 @@ import TutorOsStartPage from "@/tutoros/pages/start";
 import TutorOsSessionPage from "@/tutoros/pages/session";
 import TutorOsVerifyPage from "@/tutoros/pages/verify";
 import TutorOsHistoryPage from "@/tutoros/pages/history";
-import TutorOsCommandPage from "@/tutoros/pages/command";
 
 const queryClient = new QueryClient();
 
@@ -65,7 +64,6 @@ function Router() {
       <Route path="/tutoros/session/:id" component={TutorOsSessionPage} />
       <Route path="/tutoros/verify/:id" component={TutorOsVerifyPage} />
       <Route path="/tutoros/history" component={TutorOsHistoryPage} />
-      <Route path="/tutoros/command" component={TutorOsCommandPage} />
       <Route path="/tutoros" component={TutorOsHomePage} />
       <Route path="/" component={() => null} />
       <Route component={NotFound} />

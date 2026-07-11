@@ -55,10 +55,9 @@ Members visit the portal, enter their username (e.g. `Matthew-Lim`) and their St
 
 **PREP → SESSION → VERIFY → REMEMBER**
 
-- Start Session generates a prep brief from tutee memory (demo Maria seed + optional EverOS)
+- Start Session generates an **LLM prep brief** (Butterbase AI / Claude-class coaching) grounded in tutee memory
 - Timer + 3-tap rubric (no in-session AI listening)
 - Student verify check-in (~30s) scores a learning moment
-- Officer Command shows tonight’s aggregates and mismatch flags
 - Existing NHS hours dashboard remains at `/dashboard`
 
 Butterbase app: `app_tsc2mvlq21yo` (`tutoros-leigh-nhs`).
@@ -67,6 +66,8 @@ Butterbase app: `app_tsc2mvlq21yo` (`tutoros-leigh-nhs`).
 
 - TutorOS UI follows the Khan Academy–style Figma mobile templates (blue primary `#1865F2`, bottom nav, list layouts, rounded CTAs) while implementing the Prep/Verify product — not a curriculum browser.
 - No session audio/transcripts; student demonstrates understanding in Verify.
+- Officer Command is out of scope for now (removed from MVP UI).
+- Prep briefs should read like ChatGPT/Claude coaching — not static templates.
 
 ## Gotchas
 

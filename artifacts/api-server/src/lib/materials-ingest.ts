@@ -172,8 +172,11 @@ export async function getStorageDownloadUrl(
       { headers: { Authorization: `Bearer ${apiKey}` } },
     );
     if (!response.ok) return null;
-    const data = (await response.json()) as { downloadUrl?: string };
-    return data.downloadUrl ?? null;
+    const data = (await response.json()) as {
+      downloadUrl?: string;
+      download_url?: string;
+    };
+    return data.downloadUrl ?? data.download_url ?? null;
   } catch {
     return null;
   }
@@ -220,25 +223,32 @@ export async function ingestTeacherMaterial(input: {
         body: JSON.stringify({
           filename,
           contentType,
+          content_type: contentType,
           sizeBytes: bytes.length,
+          size_bytes: bytes.length,
+          public: true,
         }),
       });
       if (uploadMeta.ok) {
         const meta = (await uploadMeta.json()) as {
           uploadUrl?: string;
+          upload_url?: string;
           objectId?: string;
+          object_id?: string;
         };
-        if (meta.uploadUrl && meta.objectId) {
-          const put = await fetch(meta.uploadUrl, {
+        const uploadUrl = meta.uploadUrl ?? meta.upload_url;
+        const objectId = meta.objectId ?? meta.object_id;
+        if (uploadUrl && objectId) {
+          const put = await fetch(uploadUrl, {
             method: "PUT",
             headers: { "Content-Type": contentType },
             body: bytes,
           });
-          if (put.ok) storageObjectId = meta.objectId;
+          if (put.ok) storageObjectId = objectId;
         }
       }
     } catch {
-      // continue
+      // continue — content_base64 fallback below
     }
   }
 
@@ -279,15 +289,23 @@ export async function ingestTeacherMaterial(input: {
     text?.slice(0, 180) ||
     filename;
 
-  // Keep full-resolution image bytes for tutor preview (high res).
+  // Keep full-resolution image bytes for tutor preview when storage is unavailable.
+  // Prefer Butterbase storage for large images so DB rows stay small.
+  const isImage = isImageContentType(contentType, filename);
   const shouldInline =
     Boolean(input.contentBase64) &&
-    (isImageContentType(contentType, filename) ||
-      (input.contentBase64?.length ?? 0) <= MAX_INLINE_BASE64_CHARS);
+    (!storageObjectId || !isImage) &&
+    (isImage || (input.contentBase64?.length ?? 0) <= MAX_INLINE_BASE64_CHARS);
   const contentBase64 =
     shouldInline && input.contentBase64 && input.contentBase64.length <= MAX_INLINE_BASE64_CHARS
       ? input.contentBase64
-      : null;
+      : isImage && input.contentBase64 && !storageObjectId
+        ? input.contentBase64.slice(0, MAX_INLINE_BASE64_CHARS)
+        : null;
+
+  if (isImage && !storageObjectId && !contentBase64) {
+    throw new Error("Could not store the image. Try a smaller PNG/JPEG (under 10 MB).");
+  }
 
   const record: CourseMaterialRecord = {
     id: crypto.randomUUID(),
@@ -300,14 +318,14 @@ export async function ingestTeacherMaterial(input: {
     storageObjectId: storageObjectId ?? null,
     contentType,
     contentBase64,
-    status,
+    status: storageObjectId || documentId ? (documentId ? "ingested" : "queued") : status,
     uploadedBy: input.uploadedBy ?? null,
     createdAt: new Date().toISOString(),
   };
 
   localMaterials.unshift(record);
 
-  await bbFetch(`/course_materials`, {
+  const saved = await bbFetch(`/course_materials`, {
     method: "POST",
     body: JSON.stringify({
       id: record.id,
@@ -319,12 +337,20 @@ export async function ingestTeacherMaterial(input: {
       document_id: record.documentId,
       storage_object_id: record.storageObjectId,
       content_type: record.contentType,
+      // Prefer storage_object_id for images; only inline base64 when needed.
       content_base64: record.contentBase64,
       status: record.status,
       uploaded_by: record.uploadedBy,
       created_at: record.createdAt,
     }),
   });
+
+  if (!saved && isImage && !storageObjectId) {
+    // In-memory only — published/autoscale will lose this. Surface a clear error.
+    throw new Error(
+      "Image uploaded to this server only, but could not be saved to the database. Please try again.",
+    );
+  }
 
   return record;
 }

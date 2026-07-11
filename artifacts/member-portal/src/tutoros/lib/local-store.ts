@@ -3,11 +3,14 @@ import type {
   PracticeProblem,
   SessionListResponse,
   SessionType,
+  StudentEvidence,
+  TutorEvidence,
   TutorOsSession,
   TutorRubric,
   TutoringRequest,
   TutoringRequestStatus,
 } from "./api";
+import { fuseEvidence, studentExplanationFromEvidence } from "./evidence-fusion";
 import {
   buildDemoTuteeMemoryMap,
   DEMO_TUTORING_REQUESTS,
@@ -89,9 +92,11 @@ interface TuteeMemory {
   episodes: Array<{
     topic: string;
     summary: string;
+    headline?: string;
     outcome?: string;
     approach?: string;
     score?: number;
+    signals?: Record<string, unknown>;
   }>;
 }
 
@@ -195,7 +200,7 @@ function buildTemplateBrief(input: {
     ],
     contextTitle: "Last session review",
     contextBullets: [
-      `Last time: ${episode.summary}`,
+      `What changed: ${episode.headline ?? episode.summary}`,
       `Strategy that helped: ${preferred}`,
       "What to adjust: slow down before independent practice.",
     ],
@@ -322,7 +327,7 @@ function upsertSession(session: TutorOsSession) {
 }
 
 function rememberAfterVerify(session: TutorOsSession) {
-  if (session.verifyScore == null) return;
+  if (session.verifyScore == null && !session.tutorEvidence) return;
   const map = readMemoryMap();
   const existing = map[session.tuteeSlug] ?? {
     tuteeSlug: session.tuteeSlug,
@@ -331,16 +336,32 @@ function rememberAfterVerify(session: TutorOsSession) {
     episodes: [],
   };
 
+  const fused = fuseEvidence({
+    subject: session.subject,
+    topic: session.topic,
+    tutorEvidence: session.tutorEvidence,
+    studentEvidence: session.studentEvidence,
+    teacherEvidence: session.teacherEvidence,
+    verifyScore: session.verifyScore,
+    tutorRubric: session.tutorRubric,
+  });
+
   const episode = {
     topic: session.topic,
-    summary: `Session on ${session.subject} / ${session.topic}. Verify score ${session.verifyScore}/5.`,
-    outcome: session.verifyScore >= 4 ? "improved" : session.verifyScore >= 3 ? "partial" : "struggled",
-    approach: session.prepBrief.isAdapted ? "box method / visual" : "initial",
-    score: session.verifyScore,
+    summary: fused.summary,
+    headline: fused.headline,
+    outcome: fused.outcome,
+    approach: fused.approach ?? (session.prepBrief.isAdapted ? "box method / visual" : "initial"),
+    score: session.verifyScore ?? undefined,
+    signals: fused.signals,
   };
 
   const skills = [...(existing.profile.skills ?? [])];
-  if (session.verifyScore >= 4) skills.unshift(`factors ${session.topic} with guidance`);
+  if (session.verifyScore != null && session.verifyScore >= 4) {
+    skills.unshift(`factors ${session.topic} with guidance`);
+  } else if (session.tutorEvidence?.whatChangedToday) {
+    skills.unshift(session.tutorEvidence.whatChangedToday.slice(0, 80));
+  }
 
   map[session.tuteeSlug] = {
     ...existing,
@@ -348,8 +369,8 @@ function rememberAfterVerify(session: TutorOsSession) {
     profile: {
       ...existing.profile,
       preferredApproach:
-        session.verifyScore >= 3
-          ? "visual / box method"
+        session.verifyScore != null && session.verifyScore >= 3
+          ? session.tutorEvidence?.whatClicked ?? "visual / box method"
           : existing.profile.preferredApproach ?? "visual / step-by-step",
       skills: skills.slice(0, 8),
     },
@@ -488,7 +509,12 @@ export const localTutorOs = {
 
   endSession(
     id: string,
-    input: { tutorRubric: TutorRubric; sessionType: SessionType; durationMinutes?: number },
+    input: {
+      tutorRubric: TutorRubric;
+      sessionType: SessionType;
+      durationMinutes?: number;
+      tutorEvidence: TutorEvidence;
+    },
   ): TutorOsSession {
     const session = this.getSession(id);
     if (session.status !== "active" || !session.timerStarted) {
@@ -510,28 +536,45 @@ export const localTutorOs = {
       durationMinutes,
       sessionType: input.sessionType,
       tutorRubric: input.tutorRubric,
+      tutorEvidence: input.tutorEvidence,
+      fusedHeadline: input.tutorEvidence.whatChangedToday,
       updatedAt: endedAt,
     });
   },
 
-  verifySession(id: string, input: { explanation: string; answer: string }): TutorOsSession {
+  verifySession(
+    id: string,
+    input: { answer: string; studentEvidence: StudentEvidence },
+  ): TutorOsSession {
     const session = this.getSession(id);
     if (!session.tutorRubric) throw new Error("Tutor must complete the rubric before verify");
+    const explanation = studentExplanationFromEvidence(input.studentEvidence);
     const scored = scoreVerification({
-      explanation: input.explanation,
+      explanation,
       answer: input.answer,
       topic: session.topic,
+      tutorRubric: session.tutorRubric,
+    });
+    const fused = fuseEvidence({
+      subject: session.subject,
+      topic: session.topic,
+      tutorEvidence: session.tutorEvidence,
+      studentEvidence: input.studentEvidence,
+      teacherEvidence: session.teacherEvidence,
+      verifyScore: scored.score,
       tutorRubric: session.tutorRubric,
     });
     const updated = upsertSession({
       ...session,
       status: "verified",
-      verifyExplanation: input.explanation,
+      verifyExplanation: explanation,
       verifyAnswer: input.answer,
       verifyScore: scored.score,
       verifyMismatch: scored.mismatch,
       learningMoment: scored.learningMoment,
       memoryNotes: { notes: scored.notes },
+      studentEvidence: input.studentEvidence,
+      fusedHeadline: fused.headline,
       updatedAt: new Date().toISOString(),
     });
     rememberAfterVerify(updated);
@@ -612,6 +655,24 @@ export const localTutorOs = {
       status: "claimed",
       claimedByUsername: "local-tutor",
       claimedAt: now,
+      updatedAt: now,
+    };
+    writeRequests(all);
+    return all[idx];
+  },
+
+  completeTutoringRequest(
+    id: string,
+    input: { whatChangedToday: string },
+  ): TutoringRequest {
+    const all = readRequests();
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx < 0) throw new Error("Request not found");
+    const now = new Date().toISOString();
+    all[idx] = {
+      ...all[idx],
+      status: "done",
+      whatChangedToday: input.whatChangedToday.trim(),
       updatedAt: now,
     };
     writeRequests(all);

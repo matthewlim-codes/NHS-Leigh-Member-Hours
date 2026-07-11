@@ -2,6 +2,25 @@ export type SessionStatus = "prep" | "active" | "awaiting_verify" | "verified" |
 export type TutorRubric = "independent" | "with_hints" | "not_yet";
 export type SessionType = "hw_center" | "tutorial";
 
+export interface TutorEvidence {
+  todaysGoal: string;
+  biggestMisconception: string;
+  whatClicked: string;
+  independence: number;
+  whatChangedToday: string;
+}
+
+export interface StudentEvidence {
+  confidenceBefore: number;
+  confidenceAfter: number;
+  stillConfusing: string;
+  whatChangedToday: string;
+}
+
+export interface TeacherEvidence {
+  whatChangedToday: string;
+}
+
 export interface WorkedExampleStep {
   label: string;
   detail: string;
@@ -65,6 +84,10 @@ export interface TutorOsSession {
   learningMoment?: boolean;
   exitProblem?: string | null;
   memoryNotes?: Record<string, unknown> | null;
+  tutorEvidence?: TutorEvidence | null;
+  studentEvidence?: StudentEvidence | null;
+  teacherEvidence?: TeacherEvidence | null;
+  fusedHeadline?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -209,7 +232,12 @@ export function beginSession(id: string) {
 
 export function endSession(
   id: string,
-  input: { tutorRubric: TutorRubric; sessionType: SessionType; durationMinutes?: number },
+  input: {
+    tutorRubric: TutorRubric;
+    sessionType: SessionType;
+    durationMinutes?: number;
+    tutorEvidence: TutorEvidence;
+  },
 ) {
   return withFallback(
     () =>
@@ -234,7 +262,10 @@ export function purgeSessions(
   );
 }
 
-export function verifySession(id: string, input: { explanation: string; answer: string }) {
+export function verifySession(
+  id: string,
+  input: { answer: string; studentEvidence: StudentEvidence },
+) {
   return withFallback(
     () =>
       api<TutorOsSession>(`/tutoros/sessions/${id}/verify`, {
@@ -255,6 +286,7 @@ export interface TutoringRequest {
   subject: string;
   topic: string;
   notes?: string | null;
+  whatChangedToday?: string | null;
   status: TutoringRequestStatus;
   claimedByUsername?: string | null;
   claimedAt?: string | null;
@@ -296,6 +328,17 @@ export function claimTutoringRequest(id: string) {
         body: "{}",
       }),
     () => localTutorOs.claimTutoringRequest(id),
+  );
+}
+
+export function completeTutoringRequest(id: string, input: { whatChangedToday: string }) {
+  return withFallback(
+    () =>
+      api<TutoringRequest>(`/tutoros/requests/${id}/complete`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.completeTutoringRequest(id, input),
   );
 }
 

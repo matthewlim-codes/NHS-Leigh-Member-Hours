@@ -1,4 +1,10 @@
 import { Router, type IRouter } from "express";
+import {
+  fuseEvidence,
+  parseStudentEvidence,
+  parseTutorEvidence,
+  studentExplanationFromEvidence,
+} from "../lib/evidence-fusion";
 import { isEverOSConfigured } from "../lib/everos-client";
 import { recordTutoringSession } from "../lib/tutor-memory";
 import {
@@ -314,6 +320,12 @@ router.post("/tutoros/sessions/:id/end", async (req, res): Promise<void> => {
     return;
   }
 
+  const tutorEvidence = parseTutorEvidence(req.body?.tutorEvidence);
+  if (!tutorEvidence) {
+    res.status(400).json({ error: "tutorEvidence is required with all reflection fields" });
+    return;
+  }
+
   try {
     const session = await getSession(req.params.id);
     if (!session || session.tutorUsername !== username) {
@@ -342,6 +354,8 @@ router.post("/tutoros/sessions/:id/end", async (req, res): Promise<void> => {
       durationMinutes: computedDuration,
       sessionType,
       tutorRubric: rubric,
+      tutorEvidence,
+      fusedHeadline: tutorEvidence.whatChangedToday,
     });
     res.json(updated);
   } catch (error) {
@@ -352,14 +366,19 @@ router.post("/tutoros/sessions/:id/end", async (req, res): Promise<void> => {
 });
 
 router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
-  const explanation =
-    typeof req.body?.explanation === "string" ? req.body.explanation.trim() : "";
   const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
+  const studentEvidence = parseStudentEvidence(req.body?.studentEvidence);
 
-  if (!explanation || !answer) {
-    res.status(400).json({ error: "explanation and answer are required" });
+  if (!answer) {
+    res.status(400).json({ error: "answer is required" });
     return;
   }
+  if (!studentEvidence) {
+    res.status(400).json({ error: "studentEvidence is required with confidence and what changed" });
+    return;
+  }
+
+  const explanation = studentExplanationFromEvidence(studentEvidence);
 
   try {
     const session = await getSession(req.params.id);
@@ -391,6 +410,16 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
       verifyMismatch: scored.mismatch,
       learningMoment: scored.learningMoment,
       memoryNotes: { notes: scored.notes },
+      studentEvidence,
+      fusedHeadline: fuseEvidence({
+        subject: session.subject,
+        topic: session.topic,
+        tutorEvidence: session.tutorEvidence,
+        studentEvidence,
+        teacherEvidence: session.teacherEvidence,
+        verifyScore: scored.score,
+        tutorRubric: session.tutorRubric,
+      }).headline,
     });
 
     if (updated) {
@@ -398,12 +427,24 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
 
       if (isEverOSConfigured()) {
         try {
+          const reflectionParts = [
+            session.tutorEvidence?.whatChangedToday &&
+              `Tutor: ${session.tutorEvidence.whatChangedToday}`,
+            studentEvidence.whatChangedToday &&
+              `Student: ${studentEvidence.whatChangedToday}`,
+            session.teacherEvidence?.whatChangedToday &&
+              `Teacher: ${session.teacherEvidence.whatChangedToday}`,
+          ].filter(Boolean);
+
           await recordTutoringSession({
             tuteeId: updated.tuteeSlug,
             sessionId: updated.id,
             subject: updated.subject,
             topic: updated.topic,
-            tutorReflection: `Rubric: ${updated.tutorRubric}. Student explanation recorded.`,
+            tutorReflection:
+              reflectionParts.length > 0
+                ? reflectionParts.join(" ")
+                : `Rubric: ${updated.tutorRubric}. Student check-in recorded.`,
             understandingScore: scored.score,
             durationMinutes: updated.durationMinutes ?? undefined,
             location: updated.sessionType ?? undefined,
@@ -506,8 +547,15 @@ router.post("/tutoros/requests/:id/complete", async (req, res): Promise<void> =>
   const username = requireAuth(req, res);
   if (!username) return;
 
+  const whatChangedToday =
+    typeof req.body?.whatChangedToday === "string" ? req.body.whatChangedToday.trim() : "";
+  if (!whatChangedToday) {
+    res.status(400).json({ error: "whatChangedToday is required" });
+    return;
+  }
+
   try {
-    const done = await completeTutoringRequest(req.params.id);
+    const done = await completeTutoringRequest(req.params.id, { whatChangedToday });
     if (!done) {
       res.status(404).json({ error: "Request not found" });
       return;

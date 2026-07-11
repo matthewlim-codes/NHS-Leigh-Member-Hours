@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
+import { ScalePicker } from "../components/scale-picker";
 import { PrimaryButton, TutorOsHeader, TutorOsShell } from "../components/shell";
+import { emptyStudentEvidence } from "../lib/evidence-types";
 import { getSession, verifySession, type TutorOsSession } from "../lib/api";
 
 export default function TutorOsVerifyPage() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [session, setSession] = useState<TutorOsSession | null>(null);
-  const [explanation, setExplanation] = useState("");
+  const [studentEvidence, setStudentEvidence] = useState(emptyStudentEvidence());
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -23,13 +25,22 @@ export default function TutorOsVerifyPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
   }, [params.id]);
 
+  const studentEvidenceComplete = studentEvidence.whatChangedToday.trim().length > 0;
+
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session) return;
+    if (!session || !studentEvidenceComplete) return;
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await verifySession(session.id, { explanation, answer });
+      const updated = await verifySession(session.id, {
+        answer,
+        studentEvidence: {
+          ...studentEvidence,
+          stillConfusing: studentEvidence.stillConfusing.trim(),
+          whatChangedToday: studentEvidence.whatChangedToday.trim(),
+        },
+      });
       setDone(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verify failed");
@@ -49,11 +60,16 @@ export default function TutorOsVerifyPage() {
           <h2 className="text-2xl font-bold text-slate-900">
             {done.learningMoment ? "Verified learning moment" : "Session recorded"}
           </h2>
+          {done.fusedHeadline && (
+            <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-[#1865F2]">
+              What changed: {done.fusedHeadline}
+            </p>
+          )}
           <p className="text-sm text-slate-600 leading-relaxed">
             {done.verifyMismatch
               ? "Flagged for officers: tutor rubric and student score disagreed."
               : done.learningMoment
-                ? "Memory updated. Next prep brief for this tutee will be sharper."
+                ? "Evidence fused into memory. Next prep brief for this tutee will be sharper."
                 : "Hours can still count. Learning moments require a stronger verify match."}
           </p>
           <PrimaryButton onClick={() => setLocation("/tutoros")}>Done</PrimaryButton>
@@ -76,19 +92,64 @@ export default function TutorOsVerifyPage() {
           </p>
         </div>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-semibold text-slate-800">
-            In your own words, what do you understand better now?
-          </span>
-          <textarea
-            value={explanation}
-            onChange={(e) => setExplanation(e.target.value)}
-            rows={4}
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="I can factor by…"
-            required
+        <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+          <div>
+            <h3 className="font-bold text-slate-900">Your reflection</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              These small signals help your tutor and AI track real progress.
+            </p>
+          </div>
+
+          <ScalePicker
+            label="Confidence before session"
+            value={studentEvidence.confidenceBefore}
+            onChange={(confidenceBefore) =>
+              setStudentEvidence((ev) => ({ ...ev, confidenceBefore }))
+            }
+            lowLabel="Lost"
+            highLabel="Got it"
           />
-        </label>
+
+          <ScalePicker
+            label="Confidence after session"
+            value={studentEvidence.confidenceAfter}
+            onChange={(confidenceAfter) =>
+              setStudentEvidence((ev) => ({ ...ev, confidenceAfter }))
+            }
+            lowLabel="Still lost"
+            highLabel="Got it"
+          />
+
+          <label className="block space-y-1.5">
+            <span className="text-sm font-semibold text-slate-800">
+              What still feels confusing?
+            </span>
+            <textarea
+              value={studentEvidence.stillConfusing}
+              onChange={(e) =>
+                setStudentEvidence((ev) => ({ ...ev, stillConfusing: e.target.value }))
+              }
+              rows={2}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+              placeholder="When the middle term is negative…"
+            />
+          </label>
+
+          <label className="block space-y-1.5 rounded-xl border border-[#1865F2]/30 bg-blue-50/50 p-3">
+            <span className="text-sm font-bold text-[#1865F2]">What changed today?</span>
+            <p className="text-xs text-slate-600">Not a summary — what shifted for you?</p>
+            <textarea
+              value={studentEvidence.whatChangedToday}
+              onChange={(e) =>
+                setStudentEvidence((ev) => ({ ...ev, whatChangedToday: e.target.value }))
+              }
+              rows={2}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+              placeholder="I finally understand why negatives flip"
+              required
+            />
+          </label>
+        </div>
 
         <label className="block space-y-1.5">
           <span className="text-sm font-semibold text-slate-800">
@@ -109,7 +170,10 @@ export default function TutorOsVerifyPage() {
           </div>
         )}
 
-        <PrimaryButton type="submit" disabled={submitting || !session}>
+        <PrimaryButton
+          type="submit"
+          disabled={submitting || !session || !studentEvidenceComplete || !answer.trim()}
+        >
           {submitting ? "Scoring…" : "Submit check-in"}
         </PrimaryButton>
       </form>

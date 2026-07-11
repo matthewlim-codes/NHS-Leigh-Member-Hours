@@ -23,6 +23,16 @@ export interface WorkedExampleStep {
   detail: string;
 }
 
+export type PracticeProblemDifficulty = "warm-up" | "guided" | "independent";
+
+export interface PracticeProblem {
+  id: string;
+  prompt: string;
+  steps: WorkedExampleStep[];
+  discussionStems: string[];
+  difficulty: PracticeProblemDifficulty;
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
@@ -36,6 +46,8 @@ export interface PrepBrief {
   workedExampleSteps?: WorkedExampleStep[];
   misconceptionTips?: string[];
   teacherNotes?: string[];
+  /** AI-generated (or tutor-edited) practice problems for the session */
+  practiceProblems?: PracticeProblem[];
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PrepBriefView } from "../components/prep-brief-view";
+import { PracticeProblemsSection } from "../components/practice-problems-section";
 import {
   PrimaryButton,
   SecondaryButton,
@@ -18,7 +19,10 @@ import {
 import {
   beginSession,
   endSession,
+  generatePracticeProblems,
   getSession,
+  updatePracticeProblems,
+  type PracticeProblem,
   type SessionType,
   type TutorOsSession,
   type TutorRubric,
@@ -36,6 +40,9 @@ export default function TutorOsSessionPage() {
   const [sessionType, setSessionType] = useState<SessionType>("hw_center");
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showRubric, setShowRubric] = useState(false);
+  const [generatingProblems, setGeneratingProblems] = useState(false);
+  const [savingProblems, setSavingProblems] = useState(false);
+  const saveProblemsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!params.id) return;
@@ -75,6 +82,48 @@ export default function TutorOsSessionPage() {
       setError(err instanceof Error ? err.message : "Could not begin");
     }
   };
+
+  const onGeneratePracticeProblems = async () => {
+    if (!session) return;
+    setGeneratingProblems(true);
+    setError(null);
+    try {
+      const updated = await generatePracticeProblems(session.id);
+      setSession(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate practice questions");
+    } finally {
+      setGeneratingProblems(false);
+    }
+  };
+
+  const onPracticeProblemsChange = (problems: PracticeProblem[]) => {
+    if (!session) return;
+    const sessionId = session.id;
+    setSession({
+      ...session,
+      prepBrief: { ...session.prepBrief, practiceProblems: problems },
+    });
+
+    if (saveProblemsTimer.current) clearTimeout(saveProblemsTimer.current);
+    saveProblemsTimer.current = setTimeout(async () => {
+      setSavingProblems(true);
+      try {
+        const updated = await updatePracticeProblems(sessionId, problems);
+        setSession(updated);
+      } catch {
+        // Keep local edits visible even if save fails
+      } finally {
+        setSavingProblems(false);
+      }
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (saveProblemsTimer.current) clearTimeout(saveProblemsTimer.current);
+    };
+  }, []);
 
   const onEnd = async () => {
     if (!session || !rubric || !session.startedAt) return;
@@ -141,6 +190,17 @@ export default function TutorOsSessionPage() {
           topic={session.topic}
           tuteeName={session.tuteeName}
         />
+
+        <PracticeProblemsSection
+          problems={brief.practiceProblems ?? []}
+          generating={generatingProblems}
+          onGenerate={onGeneratePracticeProblems}
+          onChange={onPracticeProblemsChange}
+        />
+
+        {savingProblems && (
+          <p className="text-xs text-slate-500">Saving practice question edits…</p>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

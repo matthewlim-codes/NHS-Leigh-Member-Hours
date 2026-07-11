@@ -14,9 +14,14 @@ import {
   listTutoringRequests,
   claimTutoringRequest,
   completeTutoringRequest,
+  type PracticeProblem,
   type SessionType,
   type TutorRubric,
 } from "../lib/tutoros-store";
+import {
+  generatePracticeProblems,
+  normalizePracticeProblems,
+} from "../lib/practice-problems-agent";
 
 const router: IRouter = Router();
 
@@ -155,6 +160,107 @@ router.get("/tutoros/sessions/:id", async (req, res): Promise<void> => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to load session",
+    });
+  }
+});
+
+function parsePracticeProblemsBody(body: unknown): PracticeProblem[] | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = (body as { practiceProblems?: unknown }).practiceProblems;
+  if (!Array.isArray(raw)) return null;
+  const normalized = normalizePracticeProblems(
+    raw.map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      return {
+        id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
+        prompt: typeof row.prompt === "string" ? row.prompt : "",
+        difficulty:
+          row.difficulty === "warm-up" ||
+          row.difficulty === "guided" ||
+          row.difficulty === "independent"
+            ? row.difficulty
+            : "guided",
+        steps: Array.isArray(row.steps)
+          ? row.steps
+              .map((step) => {
+                if (!step || typeof step !== "object") return null;
+                const s = step as Record<string, unknown>;
+                const label = typeof s.label === "string" ? s.label : "Step";
+                const detail = typeof s.detail === "string" ? s.detail : "";
+                return detail ? { label, detail } : null;
+              })
+              .filter(Boolean)
+          : [],
+        discussionStems: Array.isArray(row.discussionStems)
+          ? row.discussionStems.map(String).filter(Boolean)
+          : [],
+      };
+    }).filter(Boolean) as PracticeProblem[],
+  );
+  return normalized.filter((p) => p.prompt.trim());
+}
+
+router.post("/tutoros/sessions/:id/practice-problems/generate", async (req, res): Promise<void> => {
+  const username = requireMember(req, res);
+  if (!username) return;
+
+  try {
+    const session = await getSession(req.params.id);
+    if (!session || session.tutorUsername !== username) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    const practiceProblems = await generatePracticeProblems({
+      tuteeName: session.tuteeName,
+      tuteeSlug: session.tuteeSlug,
+      subject: session.subject,
+      topic: session.topic,
+      prepBrief: session.prepBrief,
+    });
+
+    const updated = await updateSession(session.id, {
+      prepBrief: {
+        ...session.prepBrief,
+        practiceProblems,
+      },
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to generate practice problems",
+    });
+  }
+});
+
+router.patch("/tutoros/sessions/:id/practice-problems", async (req, res): Promise<void> => {
+  const username = requireMember(req, res);
+  if (!username) return;
+
+  const practiceProblems = parsePracticeProblemsBody(req.body);
+  if (!practiceProblems) {
+    res.status(400).json({ error: "practiceProblems array is required" });
+    return;
+  }
+
+  try {
+    const session = await getSession(req.params.id);
+    if (!session || session.tutorUsername !== username) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    const updated = await updateSession(session.id, {
+      prepBrief: {
+        ...session.prepBrief,
+        practiceProblems,
+      },
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to save practice problems",
     });
   }
 });

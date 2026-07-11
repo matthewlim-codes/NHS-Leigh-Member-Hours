@@ -82,6 +82,8 @@ logger.info(
     routes: [
       "GET /api/tutoros/meta",
       "POST /api/tutoros/sessions/start",
+      "POST /api/tutoros/sessions/:id/practice-problems/generate",
+      "PATCH /api/tutoros/sessions/:id/practice-problems",
       "GET /api/tutoros/sessions",
       "GET /api/tutoros/requests",
       "POST /api/tutoros/requests",

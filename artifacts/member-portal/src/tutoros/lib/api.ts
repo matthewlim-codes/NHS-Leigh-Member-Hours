@@ -7,6 +7,16 @@ export interface WorkedExampleStep {
   detail: string;
 }
 
+export type PracticeProblemDifficulty = "warm-up" | "guided" | "independent";
+
+export interface PracticeProblem {
+  id: string;
+  prompt: string;
+  steps: WorkedExampleStep[];
+  discussionStems: string[];
+  difficulty: PracticeProblemDifficulty;
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
@@ -25,6 +35,8 @@ export interface PrepBrief {
   misconceptionTips?: string[];
   /** Teacher-reported needs (first session; populated by teacher-notes integration) */
   teacherNotes?: string[];
+  /** AI-generated (or tutor-edited) practice problems */
+  practiceProblems?: PracticeProblem[];
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
@@ -284,5 +296,27 @@ export function claimTutoringRequest(id: string) {
         body: "{}",
       }),
     () => localTutorOs.claimTutoringRequest(id),
+  );
+}
+
+export function generatePracticeProblems(sessionId: string) {
+  return withFallback(
+    () =>
+      api<TutorOsSession>(`/tutoros/sessions/${sessionId}/practice-problems/generate`, {
+        method: "POST",
+        body: "{}",
+      }),
+    () => localTutorOs.generatePracticeProblems(sessionId),
+  );
+}
+
+export function updatePracticeProblems(sessionId: string, practiceProblems: PracticeProblem[]) {
+  return withFallback(
+    () =>
+      api<TutorOsSession>(`/tutoros/sessions/${sessionId}/practice-problems`, {
+        method: "PATCH",
+        body: JSON.stringify({ practiceProblems }),
+      }),
+    () => localTutorOs.updatePracticeProblems(sessionId, practiceProblems),
   );
 }

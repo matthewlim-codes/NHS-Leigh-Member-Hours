@@ -1,5 +1,6 @@
 import type {
   PrepBrief,
+  PracticeProblem,
   SessionListResponse,
   SessionType,
   TutorOsSession,
@@ -13,6 +14,10 @@ import {
   slugifyTutee,
   teacherNotesFromMemory,
 } from "./demo-data";
+import {
+  normalizePracticeProblems,
+  templatePracticeProblems,
+} from "./practice-problems-templates";
 
 const SESSIONS_KEY = "tutoros-sessions-v1";
 const MEMORY_KEY = "tutoros-memory-v2";
@@ -611,5 +616,33 @@ export const localTutorOs = {
     };
     writeRequests(all);
     return all[idx];
+  },
+
+  generatePracticeProblems(sessionId: string): TutorOsSession {
+    const session = this.getSession(sessionId);
+    const practiceProblems = templatePracticeProblems({
+      subject: session.subject,
+      topic: session.topic,
+    });
+    return upsertSession({
+      ...session,
+      prepBrief: { ...session.prepBrief, practiceProblems },
+      updatedAt: new Date().toISOString(),
+    });
+  },
+
+  updatePracticeProblems(
+    sessionId: string,
+    practiceProblems: PracticeProblem[],
+  ): TutorOsSession {
+    const session = this.getSession(sessionId);
+    return upsertSession({
+      ...session,
+      prepBrief: {
+        ...session.prepBrief,
+        practiceProblems: normalizePracticeProblems(practiceProblems),
+      },
+      updatedAt: new Date().toISOString(),
+    });
   },
 };

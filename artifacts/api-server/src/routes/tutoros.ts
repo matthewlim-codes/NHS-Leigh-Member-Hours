@@ -30,7 +30,7 @@ import {
   normalizePracticeProblems,
 } from "../lib/practice-problems-agent";
 import { scoreVerificationWithAi } from "../lib/verify-agent";
-import { ingestTeacherMaterial, listCourseMaterials } from "../lib/materials-ingest";
+import { ingestTeacherMaterial, listCourseMaterials, getCourseMaterial, getStorageDownloadUrl, materialsForSession } from "../lib/materials-ingest";
 
 const router: IRouter = Router();
 
@@ -173,6 +173,25 @@ router.get("/tutoros/sessions/:id", async (req, res): Promise<void> => {
     if (!session) {
       res.status(404).json({ error: "Session not found" });
       return;
+    }
+    // Refresh materials so teacher uploads appear even after session start.
+    try {
+      const materialsToReview = await materialsForSession({
+        subject: session.subject,
+        topic: session.topic,
+      });
+      if (materialsToReview.length > 0) {
+        const updated = await updateSession(session.id, {
+          prepBrief: {
+            ...session.prepBrief,
+            materialsToReview,
+          },
+        });
+        res.json(updated);
+        return;
+      }
+    } catch {
+      // fall through with original session
     }
     // Public read for verify flow (student on tutor's phone / link)
     res.json(session);
@@ -649,7 +668,12 @@ router.get("/tutoros/materials", async (req, res): Promise<void> => {
     const subject = typeof req.query.subject === "string" ? req.query.subject : undefined;
     const topic = typeof req.query.topic === "string" ? req.query.topic : undefined;
     const materials = await listCourseMaterials({ subject, topic });
-    res.json({ materials });
+    res.json({
+      materials: materials.map((m) => ({
+        ...m,
+        contentBase64: m.contentBase64 ? "[stored]" : null,
+      })),
+    });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to list materials",
@@ -688,10 +712,58 @@ router.post("/tutoros/materials", async (req, res): Promise<void> => {
       contentType,
       uploadedBy: username,
     });
-    res.status(201).json(material);
+    // Don't echo multi-MB base64 back to the teacher list payload.
+    res.status(201).json({ ...material, contentBase64: material.contentBase64 ? "[stored]" : null });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to upload material",
+    });
+  }
+});
+
+router.get("/tutoros/materials/:id/file", async (req, res): Promise<void> => {
+  const username = requireAuth(req, res);
+  if (!username) return;
+
+  try {
+    const material = await getCourseMaterial(req.params.id);
+    if (!material) {
+      res.status(404).json({ error: "Material not found" });
+      return;
+    }
+
+    const contentType =
+      material.contentType ||
+      (/\.png$/i.test(material.filename)
+        ? "image/png"
+        : /\.jpe?g$/i.test(material.filename)
+          ? "image/jpeg"
+          : "application/octet-stream");
+
+    if (material.contentBase64) {
+      const buffer = Buffer.from(material.contentBase64, "base64");
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${material.filename.replace(/"/g, "")}"`,
+      );
+      res.send(buffer);
+      return;
+    }
+
+    if (material.storageObjectId) {
+      const downloadUrl = await getStorageDownloadUrl(material.storageObjectId);
+      if (downloadUrl) {
+        res.redirect(downloadUrl);
+        return;
+      }
+    }
+
+    res.status(404).json({ error: "File preview not available for this upload" });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to load material file",
     });
   }
 });

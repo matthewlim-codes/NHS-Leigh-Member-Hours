@@ -181,7 +181,29 @@ function pickUnique<T>(items: T[], count: number, rand: () => number, used: Set<
   return out;
 }
 
-/** Always-fresh template problems — never returns avoided prompts. */
+
+function fmtSigned(n: number): string {
+  return n >= 0 ? `+ ${n}` : `− ${Math.abs(n)}`;
+}
+
+function factorPrompt(p: number, q: number, a = 1): { prompt: string; answer: string; nums: string } {
+  const b = a * (p + q);
+  const c = a * p * q;
+  const aTerm = a === 1 ? "x²" : `${a}x²`;
+  const bTerm = b === 0 ? "" : b > 0 ? ` + ${b}x` : ` − ${Math.abs(b)}x`;
+  const cTerm = c === 0 ? "" : c > 0 ? ` + ${c}` : ` − ${Math.abs(c)}`;
+  const answer =
+    a === 1
+      ? `(x ${fmtSigned(p)})(x ${fmtSigned(q)})`
+      : `(${a}x ${fmtSigned(p)})(x ${fmtSigned(q)})`;
+  return {
+    prompt: `Factor: ${aTerm}${bTerm}${cTerm}`,
+    answer,
+    nums: `${p} and ${q}`,
+  };
+}
+
+/** Always-fresh template problems — difficulty mode changes content complexity. */
 function synthesizeFreshProblems(input: {
   subject: string;
   topic: string;
@@ -190,11 +212,29 @@ function synthesizeFreshProblems(input: {
   avoidPrompts: string[];
 }): PracticeProblem[] {
   const topic = `${input.subject} ${input.topic}`.toLowerCase();
-  const id = () => crypto.randomUUID();
   const band = difficultyBand(input.mode);
-  const avoid = new Set(input.avoidPrompts.map(promptKey));
+  const used = new Set(input.avoidPrompts.map(promptKey));
   const rand = mulberry32(input.seed);
-  const used = new Set(avoid);
+
+  const pickTier = <T extends { prompt: string }>(
+    pools: Record<PracticeProblemDifficulty, T[]>,
+    build: (item: T, difficulty: PracticeProblemDifficulty) => PracticeProblem,
+  ): PracticeProblem[] =>
+    band.map((difficulty) => {
+      const pool = pools[difficulty] ?? pools.medium;
+      const fresh = pool.filter((item) => !used.has(promptKey(item.prompt)));
+      const source = fresh.length > 0 ? fresh : pool;
+      let chosen = source[Math.floor(rand() * source.length)];
+      if (!chosen || used.has(promptKey(chosen.prompt))) {
+        const nonce = Math.floor(rand() * 9000) + 1000;
+        chosen = {
+          ...((chosen ?? pool[0]) as T),
+          prompt: `${(chosen ?? pool[0])?.prompt ?? `${input.topic} practice`} [${difficulty} #${nonce}]`,
+        };
+      }
+      used.add(promptKey(chosen.prompt));
+      return build(chosen, difficulty);
+    });
 
   if (
     topic.includes("passive") ||
@@ -202,127 +242,82 @@ function synthesizeFreshProblems(input: {
     topic.includes("essay") ||
     (topic.includes("english") && topic.includes("voice"))
   ) {
-    const doers = [
-      "Maya",
-      "the peer tutor",
-      "Ms. Rivera",
-      "the class",
-      "Jordan",
-      "the editor",
-      "Sam",
-      "the writing center",
-      "the student",
-      "the group",
-    ];
-    const objects = [
-      "essay",
-      "draft",
-      "outline",
-      "thesis",
-      "conclusion",
-      "introduction",
-      "paragraph",
-      "claim",
-      "counterargument",
-      "works-cited page",
-    ];
-    const verbs: Array<{ past: string; participle: string }> = [
-      { past: "wrote", participle: "written" },
-      { past: "revised", participle: "revised" },
-      { past: "submitted", participle: "submitted" },
-      { past: "graded", participle: "graded" },
-      { past: "supported", participle: "supported" },
-      { past: "rewrote", participle: "rewritten" },
-      { past: "published", participle: "published" },
-      { past: "analyzed", participle: "analyzed" },
-      { past: "cited", participle: "cited" },
-      { past: "challenged", participle: "challenged" },
-    ];
+    const pools: Record<PracticeProblemDifficulty, Array<{ prompt: string; answer: string }>> = {
+      basic: [
+        { prompt: 'Rewrite in active voice: "The essay was written by Maya."', answer: "Maya wrote the essay." },
+        { prompt: 'Rewrite in active voice: "The draft was revised by Sam."', answer: "Sam revised the draft." },
+        { prompt: 'Is this active or passive? "Maya wrote the conclusion." Explain why.', answer: "Active — Maya performs the action." },
+      ],
+      easy: [
+        { prompt: 'Rewrite in active voice: "The thesis was supported by clear evidence."', answer: "Clear evidence supported the thesis." },
+        { prompt: 'Rewrite in passive voice: "The peer tutor graded the paragraph."', answer: "The paragraph was graded by the peer tutor." },
+        { prompt: 'Is this active or passive? "The claim was challenged by the editor." Explain why.', answer: "Passive — the claim receives the action." },
+      ],
+      medium: [
+        { prompt: 'Rewrite in active voice: "It was decided that the conclusion needed stronger evidence."', answer: "The student decided the conclusion needed stronger evidence." },
+        { prompt: 'Fix the weak passive: "Mistakes were made in the works-cited page." Make it active and specific.', answer: "The writer made mistakes in the works-cited page." },
+        { prompt: 'Is this stronger active or passive for an essay claim? "The data was interpreted by the author as proof." Rewrite the better version.', answer: "Active is stronger: The author interpreted the data as proof." },
+      ],
+      challenging: [
+        { prompt: 'Rewrite in active voice without losing meaning: "The counterargument was weakened by vague evidence that had been selected by the writer."', answer: "Vague evidence the writer selected weakened the counterargument." },
+        { prompt: 'Identify voice, then rewrite: "After the draft was submitted by Maya, feedback was provided by the writing center."', answer: "After Maya submitted the draft, the writing center provided feedback." },
+        { prompt: 'Make this academic sentence active and precise: "It can be seen that the thesis is supported by two examples."', answer: "Two examples support the thesis." },
+      ],
+      advanced: [
+        { prompt: 'Revise for clarity and active voice: "It was believed by the class that the conclusion had been weakened by unsupported claims that were written overnight."', answer: "The class believed unsupported claims written overnight weakened the conclusion." },
+        { prompt: 'Diagnose voice shifts, then rewrite in consistent active voice: "When the outline was finished, Maya revised the thesis and the draft was submitted."', answer: "When Maya finished the outline, she revised the thesis and submitted the draft." },
+        { prompt: 'Choose the stronger academic version and explain why: A) "The evidence was analyzed." B) "Maya analyzed the evidence for bias."', answer: "B is stronger — names the doer and the purpose." },
+      ],
+    };
 
-    const candidates: Array<{ prompt: string; answer: string }> = [];
-    for (const doer of doers) {
-      for (const obj of objects) {
-        for (const verb of verbs) {
-          candidates.push({
-            prompt: `Rewrite in active voice: "The ${obj} was ${verb.participle} by ${doer}."`,
-            answer: `${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}.`,
-          });
-          candidates.push({
-            prompt: `Is this active or passive? "${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}." Explain why.`,
-            answer: `Active — ${doer} (subject) performs the action.`,
-          });
-          candidates.push({
-            prompt: `Rewrite in passive voice: "${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}."`,
-            answer: `The ${obj} was ${verb.participle} by ${doer}.`,
-          });
-        }
-      }
-    }
-
-    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
-    while (picked.length < 3) {
-      const n = Math.floor(rand() * 9000) + 1000;
-      const prompt = `Rewrite in active voice (set ${n}): "The argument was weakened by vague evidence."`;
-      if (used.has(promptKey(prompt))) continue;
-      used.add(promptKey(prompt));
-      picked.push({ prompt, answer: "Vague evidence weakened the argument." });
-    }
-
-    return picked.map((item, i) => ({
-      id: id(),
-      difficulty: band[i]!,
+    return pickTier(pools, (item, difficulty) => ({
+      id: crypto.randomUUID(),
+      difficulty,
       prompt: item.prompt,
       steps: [
         { label: "Find the doer", detail: "Ask who is performing the action." },
         { label: "Rewrite", detail: `Model answer: ${item.answer}` },
-        { label: "Check", detail: "Confirm meaning stayed the same and the sentence is clearer." },
+        { label: "Check", detail: "Confirm meaning stayed the same and clarity improved." },
       ],
       discussionStems: [
         "Who is doing the action in this sentence?",
-        "How does the active rewrite change the tone of the essay?",
+        "How does voice change the tone of the essay?",
       ],
     }));
   }
 
   if (topic.includes("periodic") || topic.includes("electronegativity") || topic.includes("ionization")) {
-    const pairs = [
-      ["Na", "Cl", "radius", "Na is larger — radius shrinks left→right."],
-      ["O", "S", "electronegativity", "O is higher — EN rises up a group."],
-      ["F", "N", "electronegativity", "F > N across period 2."],
-      ["K", "Na", "ionization", "K is lower — valence electron is farther out."],
-      ["Mg", "Al", "radius", "Mg is larger than Al in period 3."],
-      ["C", "F", "electronegativity", "F is highest — far right of period 2."],
-      ["Li", "F", "ionization", "F has higher IE — nuclear charge rises across the period."],
-      ["P", "N", "electronegativity", "N is higher — same group, smaller up the column."],
-      ["Ca", "Br", "radius", "Ca is larger — metals left, nonmetals right."],
-      ["Be", "O", "ionization", "O has higher IE across period 2."],
-    ] as const;
+    const pools: Record<PracticeProblemDifficulty, Array<{ prompt: string; answer: string }>> = {
+      basic: [
+        { prompt: "Which has a larger atomic radius: Na or Cl? Explain using periodic trends.", answer: "Na is larger — radius shrinks left→right." },
+        { prompt: "Which is more electronegative: O or F? Why?", answer: "F is higher — EN rises across a period." },
+        { prompt: "Which has higher first ionization energy: Li or F?", answer: "F — nuclear charge rises across period 2." },
+      ],
+      easy: [
+        { prompt: "Which is more electronegative: O or S? Why?", answer: "O is higher — EN rises up a group." },
+        { prompt: "Compare atomic radius for Mg vs Al.", answer: "Mg is larger than Al in period 3." },
+        { prompt: "Which has lower ionization energy: K or Na?", answer: "K — valence electron is farther out." },
+      ],
+      medium: [
+        { prompt: "Compare first ionization energy for Be vs O. Which is higher and why?", answer: "O has higher IE across period 2." },
+        { prompt: "Which has a larger atomic radius: Ca or Br? Explain using metals vs nonmetals.", answer: "Ca is larger — metals left, nonmetals right." },
+        { prompt: "Rank electronegativity: N vs P. Explain the group trend.", answer: "N is higher — same group, EN rises up the column." },
+      ],
+      challenging: [
+        { prompt: "Explain why F has both high electronegativity and high ionization energy compared with N.", answer: "Across period 2, nuclear charge rises while shell stays the same." },
+        { prompt: "A student says S is more electronegative than O because it has more electrons. Correct the misconception.", answer: "EN rises up a group — O is higher despite fewer electrons." },
+        { prompt: "Compare radius and ionization energy for Na vs Cl in one explanation.", answer: "Na larger radius / lower IE; Cl smaller radius / higher IE across period 3." },
+      ],
+      advanced: [
+        { prompt: "Predict which is larger and which has higher IE: Mg or S. Defend both answers with the same trend story.", answer: "Mg larger radius; S higher IE — left→right nuclear charge rises." },
+        { prompt: "Why can ionization energy dip from Be to B even though the general period trend rises?", answer: "B starts a p subshell; removing that electron is easier than Be's filled s." },
+        { prompt: "Design a 2-step comparison: radius for K vs Br, then electronegativity for O vs S.", answer: "K>Br radius (left/right); O>S EN (up group)." },
+      ],
+    };
 
-    const candidates = pairs.map(([a, b, kind, answer]) => ({
-      prompt:
-        kind === "radius"
-          ? `Which has a larger atomic radius: ${a} or ${b}? Explain using periodic trends.`
-          : kind === "electronegativity"
-            ? `Which is more electronegative: ${a} or ${b}? Why?`
-            : `Compare first ionization energy for ${a} vs ${b}. Which is higher and why?`,
-      answer,
-    }));
-
-    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
-    while (picked.length < 3) {
-      const n = Math.floor(rand() * 90) + 10;
-      const prompt = `Explain one periodic trend using elements in period ${n % 3 === 0 ? 2 : 3} (variant ${n}).`;
-      if (used.has(promptKey(prompt))) continue;
-      used.add(promptKey(prompt));
-      picked.push({
-        prompt,
-        answer: "Across a period left→right: radius shrinks; EN and IE rise.",
-      });
-    }
-
-    return picked.map((item, i) => ({
-      id: id(),
-      difficulty: band[i]!,
+    return pickTier(pools, (item, difficulty) => ({
+      id: crypto.randomUUID(),
+      difficulty,
       prompt: item.prompt,
       steps: [
         { label: "Locate", detail: "Find the elements on the periodic table." },
@@ -337,45 +332,20 @@ function synthesizeFreshProblems(input: {
   }
 
   if (topic.includes("factor") || topic.includes("algebra") || topic.includes("im2")) {
-    const pairs: Array<[number, number]> = [];
-    for (let p = -12; p <= 12; p++) {
-      if (p === 0) continue;
-      for (let q = p; q <= 12; q++) {
-        if (q === 0) continue;
-        pairs.push([p, q]);
-      }
-    }
+    const pools: Record<
+      PracticeProblemDifficulty,
+      Array<{ prompt: string; answer: string; nums: string }>
+    > = {
+      basic: [factorPrompt(2, 3), factorPrompt(1, 4), factorPrompt(2, 2)],
+      easy: [factorPrompt(3, 5), factorPrompt(2, 6), factorPrompt(4, 5)],
+      medium: [factorPrompt(-3, 5), factorPrompt(-4, 6), factorPrompt(3, -7)],
+      challenging: [factorPrompt(-6, -2), factorPrompt(-5, 8), factorPrompt(-7, -3)],
+      advanced: [factorPrompt(2, 3, 2), factorPrompt(-3, 4, 3), factorPrompt(2, -5, 2)],
+    };
 
-    const candidates = pairs.map(([p, q]) => {
-      const b = p + q;
-      const c = p * q;
-      const bTerm = b === 0 ? "" : b > 0 ? ` + ${b}x` : ` − ${Math.abs(b)}x`;
-      const cTerm = c === 0 ? "" : c > 0 ? ` + ${c}` : ` − ${Math.abs(c)}`;
-      const fmt = (n: number) => (n >= 0 ? `+ ${n}` : `− ${Math.abs(n)}`);
-      return {
-        prompt: `Factor: x²${bTerm}${cTerm}`,
-        answer: `(x ${fmt(p)})(x ${fmt(q)})`,
-        nums: `${p} and ${q}`,
-      };
-    });
-
-    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
-    while (picked.length < 3) {
-      const p = Math.floor(rand() * 9) + 2;
-      const q = Math.floor(rand() * 9) + 2;
-      const prompt = `Factor: x² + ${p + q}x + ${p * q}`;
-      if (used.has(promptKey(prompt))) continue;
-      used.add(promptKey(prompt));
-      picked.push({
-        prompt,
-        answer: `(x + ${p})(x + ${q})`,
-        nums: `${p} and ${q}`,
-      });
-    }
-
-    return picked.map((item, i) => ({
-      id: id(),
-      difficulty: band[i]!,
+    return pickTier(pools, (item, difficulty) => ({
+      id: crypto.randomUUID(),
+      difficulty,
       prompt: item.prompt,
       steps: [
         { label: "Set up", detail: `Find two numbers that multiply and add correctly → ${item.nums}.` },
@@ -394,12 +364,12 @@ function synthesizeFreshProblems(input: {
     let prompt = "";
     let attempt = 0;
     do {
-      prompt = `${input.subject} · ${input.topic} practice ${i + 1} (${d}) [#${nonce + attempt + i * 17}]: complete one concrete task for this subject/topic only.`;
+      prompt = `${input.subject} · ${input.topic} · ${d.toUpperCase()} practice ${i + 1} [#${nonce + attempt + i * 17}]: complete one concrete ${d}-level task for this subject/topic only.`;
       attempt++;
     } while (used.has(promptKey(prompt)) && attempt < 20);
     used.add(promptKey(prompt));
     return {
-      id: id(),
+      id: crypto.randomUUID(),
       difficulty: d,
       prompt,
       steps: [
@@ -414,6 +384,7 @@ function synthesizeFreshProblems(input: {
     };
   });
 }
+
 
 async function chatCompletion(messages: Array<{ role: string; content: string }>): Promise<string | null> {
   const apiKey = getApiKey();
@@ -510,8 +481,12 @@ export async function generatePracticeProblems(input: {
           "  }",
           "] }",
           "Rules:",
-          `- Exactly 3 problems with difficulties roughly: ${band.join(", ")} (in that order).`,
+          `- Exactly 3 problems with difficulties exactly: ${band.join(", ")} (in that order).`,
           "- Prompts must be brand-new — never reuse avoided prompts or near-paraphrases.",
+          "- DIFFICULTY MUST CHANGE THE TASK COMPLEXITY, not just the label:",
+          "  basic/easy = short single-step; medium = standard; challenging/advanced = multi-clause, multi-step, or trickier cases.",
+          "- For harder mode, use advanced sentence structures / harder element comparisons / a≠1 factoring.",
+          "- For easier mode, use short direct tasks with small numbers or simple sentences.",
           "- Change numbers, sentences, or element pairs so regenerate always feels fresh.",
           "- Steps: 2-5 per problem. Discussion stems: 2-4 open questions.",
           "- Match high-school level. No surveillance language.",
@@ -570,7 +545,11 @@ export async function generatePracticeProblems(input: {
       ].slice(0, 3);
     }
 
-    return problems.slice(0, 3);
+    // Enforce visible difficulty band on every returned set.
+    return problems.slice(0, 3).map((problem, index) => ({
+      ...problem,
+      difficulty: band[index] ?? problem.difficulty,
+    }));
   } catch {
     return freshTemplates();
   }

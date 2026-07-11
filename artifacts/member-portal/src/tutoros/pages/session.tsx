@@ -48,6 +48,7 @@ export default function TutorOsSessionPage() {
   const [generatingProblems, setGeneratingProblems] = useState(false);
   const [savingProblems, setSavingProblems] = useState(false);
   const [difficultyMode, setDifficultyMode] = useState<PracticeDifficultyMode>("same");
+  const [lastGeneratedMode, setLastGeneratedMode] = useState<PracticeDifficultyMode | null>(null);
   const [tutorEvidence, setTutorEvidence] = useState(emptyTutorEvidence());
   const saveProblemsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,6 +109,7 @@ export default function TutorOsSessionPage() {
         difficultyMode,
         avoidPrompts,
       });
+      setLastGeneratedMode(difficultyMode);
       setSession(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate practice questions");
@@ -270,23 +272,55 @@ export default function TutorOsSessionPage() {
                   </p>
                 </div>
                 <ul className="space-y-3">
-                  {brief.materialsToReview!.map((material) => (
-                    <li
-                      key={material.id}
-                      className="rounded-xl border border-emerald-100 bg-white px-4 py-3 shadow-sm"
-                    >
-                      <p className="text-sm font-bold text-slate-900">{material.filename}</p>
-                      {material.teacherInstructions && (
-                        <p className="mt-2 text-sm leading-relaxed text-slate-700">
-                          <span className="font-semibold text-emerald-800">Teacher note: </span>
-                          {material.teacherInstructions}
-                        </p>
-                      )}
-                      {material.preview && !material.teacherInstructions && (
-                        <p className="mt-2 text-sm text-slate-600">{material.preview}</p>
-                      )}
-                    </li>
-                  ))}
+                  {brief.materialsToReview!.map((material) => {
+                    const imageSrc =
+                      material.previewDataUrl ||
+                      (material.isImage || material.contentType?.startsWith("image/")
+                        ? material.fileUrl
+                        : undefined);
+                    return (
+                      <li
+                        key={material.id}
+                        className="rounded-xl border border-emerald-100 bg-white px-4 py-3 shadow-sm"
+                      >
+                        <p className="text-sm font-bold text-slate-900">{material.filename}</p>
+                        {material.teacherInstructions && (
+                          <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                            <span className="font-semibold text-emerald-800">Teacher note: </span>
+                            {material.teacherInstructions}
+                          </p>
+                        )}
+                        {imageSrc ? (
+                          <a
+                            href={imageSrc}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 block overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                            data-testid={`material-preview-${material.id}`}
+                          >
+                            <img
+                              src={imageSrc}
+                              alt={material.filename}
+                              className="h-auto w-full max-h-[min(80vh,1200px)] object-contain"
+                              loading="eager"
+                              decoding="async"
+                            />
+                          </a>
+                        ) : material.fileUrl ? (
+                          <a
+                            href={material.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 inline-flex text-sm font-semibold text-emerald-700 hover:text-emerald-900"
+                          >
+                            Open uploaded file
+                          </a>
+                        ) : material.preview && !material.teacherInstructions ? (
+                          <p className="mt-2 text-sm text-slate-600">{material.preview}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             )}
@@ -298,6 +332,7 @@ export default function TutorOsSessionPage() {
               onDifficultyModeChange={setDifficultyMode}
               onGenerate={onGeneratePracticeProblems}
               onChange={onPracticeProblemsChange}
+              lastGeneratedMode={lastGeneratedMode}
             />
 
             {savingProblems && (

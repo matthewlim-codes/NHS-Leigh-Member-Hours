@@ -495,6 +495,8 @@ export const localTutorOs = {
           topic?: string | null;
           teacherInstructions?: string | null;
           preview?: string | null;
+          contentType?: string | null;
+          contentBase64?: string | null;
         }>;
         const subject = input.subject.toLowerCase();
         const topic = input.topic.toLowerCase();
@@ -509,12 +511,26 @@ export const localTutorOs = {
             return true;
           })
           .slice(0, 8)
-          .map((m) => ({
-            id: m.id ?? crypto.randomUUID(),
-            filename: m.filename,
-            teacherInstructions: m.teacherInstructions?.trim() || undefined,
-            preview: m.preview?.trim() || undefined,
-          }));
+          .map((m) => {
+            const contentType = m.contentType ?? undefined;
+            const isImage =
+              Boolean(contentType?.startsWith("image/")) ||
+              /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i.test(m.filename);
+            const previewDataUrl =
+              isImage && m.contentBase64
+                ? `data:${contentType || "image/png"};base64,${m.contentBase64}`
+                : undefined;
+            return {
+              id: m.id ?? crypto.randomUUID(),
+              filename: m.filename,
+              teacherInstructions: m.teacherInstructions?.trim() || undefined,
+              preview: m.preview?.trim() || undefined,
+              contentType,
+              isImage,
+              fileUrl: previewDataUrl,
+              previewDataUrl,
+            };
+          });
       } catch {
         materialsToReview = [];
       }

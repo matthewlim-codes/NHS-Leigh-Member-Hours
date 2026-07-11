@@ -82,6 +82,10 @@ export interface PrepBrief {
     filename: string;
     teacherInstructions?: string;
     preview?: string;
+    contentType?: string;
+    isImage?: boolean;
+    fileUrl?: string;
+    previewDataUrl?: string;
   }>;
   memoryBadges?: PrepMemoryBadge[];
   memoryEpisodes?: Array<{ topic: string; summary: string }>;
@@ -443,6 +447,8 @@ export interface CourseMaterialUpload {
   teacherInstructions?: string | null;
   documentId?: string | null;
   storageObjectId?: string | null;
+  contentType?: string | null;
+  contentBase64?: string | null;
   status: "ingested" | "queued" | "local";
   preview?: string | null;
   createdAt?: string;
@@ -479,12 +485,17 @@ export function uploadCourseMaterial(input: {
         body: JSON.stringify(input),
       }),
     async () => {
+      const isImage =
+        (input.contentType ?? "").startsWith("image/") ||
+        /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|svg)$/i.test(input.filename);
       const material: CourseMaterialUpload = {
         id: crypto.randomUUID(),
         filename: input.filename,
         subject: input.subject ?? null,
         topic: input.topic ?? null,
         teacherInstructions: input.teacherInstructions ?? null,
+        contentType: input.contentType ?? null,
+        contentBase64: isImage ? input.contentBase64 ?? null : null,
         status: "local",
         preview: (input.teacherInstructions || input.text || input.filename).slice(0, 180),
         createdAt: new Date().toISOString(),

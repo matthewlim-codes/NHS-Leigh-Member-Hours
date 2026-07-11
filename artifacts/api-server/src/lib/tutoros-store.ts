@@ -83,6 +83,10 @@ export interface PrepBrief {
     filename: string;
     teacherInstructions?: string;
     preview?: string;
+    contentType?: string;
+    isImage?: boolean;
+    fileUrl?: string;
+    previewDataUrl?: string;
   }>;
   /** AI verify follow-ups when present on results */
   practiceNext?: string;

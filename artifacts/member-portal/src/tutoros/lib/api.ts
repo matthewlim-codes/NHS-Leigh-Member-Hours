@@ -78,23 +78,21 @@ function isMissingRouteStatus(status: number) {
 }
 
 async function detectServerSupport(): Promise<boolean> {
-  if (apiMode === "server") return true;
   if (apiMode === "local") return false;
 
   try {
     const response = await fetch("/api/tutoros/meta", { credentials: "include" });
-    if (response.ok) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (response.ok && contentType.includes("application/json")) {
       apiMode = "server";
       return true;
     }
-    if (isMissingRouteStatus(response.status)) {
-      apiMode = "local";
-      return false;
-    }
+    apiMode = "local";
+    return false;
   } catch {
-    // fall through
+    apiMode = "local";
+    return false;
   }
-  return true;
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -146,6 +144,14 @@ async function withFallback<T>(serverCall: () => Promise<T>, localCall: () => Pr
       return await localCall();
     }
     if (error instanceof TypeError) {
+      apiMode = "local";
+      return await localCall();
+    }
+    if (
+      error instanceof Error &&
+      (/route missing|request failed \(404\)/i.test(error.message) ||
+        /session not found/i.test(error.message))
+    ) {
       apiMode = "local";
       return await localCall();
     }

@@ -72,9 +72,17 @@ export interface PrepBrief {
   teacherNotes?: string[];
   /** AI-generated (or tutor-edited) practice problems */
   practiceProblems?: PracticeProblem[];
+  /** Course-material snippets cited in prep (RAG) */
+  materialsCited?: string[];
+  /** Teacher-uploaded worksheets the tutor should review with the student */
+  materialsToReview?: Array<{
+    id: string;
+    filename: string;
+    teacherInstructions?: string;
+    preview?: string;
+  }>;
   memoryBadges?: PrepMemoryBadge[];
   memoryEpisodes?: Array<{ topic: string; summary: string }>;
-  materialsCited?: string[];
   practiceNext?: string;
   aiSummary?: string;
   memorySource: "everos" | "demo" | "empty" | "ai";
@@ -426,11 +434,16 @@ export function updatePracticeProblems(sessionId: string, practiceProblems: Prac
 }
 
 export interface CourseMaterialUpload {
+  id?: string;
   filename: string;
-  documentId?: string;
-  storageObjectId?: string;
+  subject?: string | null;
+  topic?: string | null;
+  teacherInstructions?: string | null;
+  documentId?: string | null;
+  storageObjectId?: string | null;
   status: "ingested" | "queued" | "local";
-  preview: string;
+  preview?: string | null;
+  createdAt?: string;
 }
 
 export function listCourseMaterials() {
@@ -453,6 +466,7 @@ export function uploadCourseMaterial(input: {
   text?: string;
   subject?: string;
   topic?: string;
+  teacherInstructions?: string;
   contentBase64?: string;
   contentType?: string;
 }) {
@@ -464,9 +478,14 @@ export function uploadCourseMaterial(input: {
       }),
     async () => {
       const material: CourseMaterialUpload = {
+        id: crypto.randomUUID(),
         filename: input.filename,
+        subject: input.subject ?? null,
+        topic: input.topic ?? null,
+        teacherInstructions: input.teacherInstructions ?? null,
         status: "local",
-        preview: (input.text ?? input.filename).slice(0, 180),
+        preview: (input.teacherInstructions || input.text || input.filename).slice(0, 180),
+        createdAt: new Date().toISOString(),
       };
       const existing = await listCourseMaterials();
       const materials = [material, ...existing.materials].slice(0, 20);

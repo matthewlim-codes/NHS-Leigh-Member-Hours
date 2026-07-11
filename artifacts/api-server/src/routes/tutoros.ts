@@ -30,7 +30,7 @@ import {
   normalizePracticeProblems,
 } from "../lib/practice-problems-agent";
 import { scoreVerificationWithAi } from "../lib/verify-agent";
-import { ingestTeacherMaterial, listLocalMaterials } from "../lib/materials-ingest";
+import { ingestTeacherMaterial, listCourseMaterials } from "../lib/materials-ingest";
 
 const router: IRouter = Router();
 
@@ -637,24 +637,35 @@ router.get("/tutoros/learning-moments", async (req, res): Promise<void> => {
 router.get("/tutoros/materials", async (req, res): Promise<void> => {
   const username = requireTeacher(req, res);
   if (!username) return;
-  res.json({ materials: listLocalMaterials() });
+  try {
+    const subject = typeof req.query.subject === "string" ? req.query.subject : undefined;
+    const topic = typeof req.query.topic === "string" ? req.query.topic : undefined;
+    const materials = await listCourseMaterials({ subject, topic });
+    res.json({ materials });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list materials",
+    });
+  }
 });
 
 router.post("/tutoros/materials", async (req, res): Promise<void> => {
   const username = requireTeacher(req, res);
   if (!username) return;
 
-  const filename = typeof req.body?.filename === "string" ? req.body.filename.trim() : "worksheet.txt";
+  const filename = typeof req.body?.filename === "string" ? req.body.filename.trim() : "worksheet.pdf";
   const text = typeof req.body?.text === "string" ? req.body.text : undefined;
   const subject = typeof req.body?.subject === "string" ? req.body.subject.trim() : undefined;
   const topic = typeof req.body?.topic === "string" ? req.body.topic.trim() : undefined;
+  const teacherInstructions =
+    typeof req.body?.teacherInstructions === "string" ? req.body.teacherInstructions.trim() : undefined;
   const contentBase64 =
     typeof req.body?.contentBase64 === "string" ? req.body.contentBase64 : undefined;
   const contentType =
     typeof req.body?.contentType === "string" ? req.body.contentType : undefined;
 
-  if (!text?.trim() && !contentBase64) {
-    res.status(400).json({ error: "text or contentBase64 is required" });
+  if (!contentBase64 && !text?.trim()) {
+    res.status(400).json({ error: "Upload a file (PDF, DOC, TXT, etc.)" });
     return;
   }
 
@@ -664,8 +675,10 @@ router.post("/tutoros/materials", async (req, res): Promise<void> => {
       text,
       subject,
       topic,
+      teacherInstructions,
       contentBase64,
       contentType,
+      uploadedBy: username,
     });
     res.status(201).json(material);
   } catch (error) {

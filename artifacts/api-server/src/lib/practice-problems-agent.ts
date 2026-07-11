@@ -30,8 +30,9 @@ function getApiKey(): string | undefined {
 function practiceModel(): string {
   return (
     process.env.TUTOROS_PRACTICE_AI_MODEL ||
+    process.env.TUTOROS_PREP_AI_MODEL ||
     process.env.TUTOROS_AI_MODEL ||
-    "anthropic/claude-sonnet-4"
+    "anthropic/claude-sonnet-4.6"
   );
 }
 
@@ -123,12 +124,38 @@ function promptKey(prompt: string): string {
   return prompt.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function looksOffSubject(prompt: string, subject: string, topic: string): boolean {
+  const hay = `${subject} ${topic}`.toLowerCase();
+  const p = prompt.toLowerCase();
+  const isEnglish =
+    hay.includes("english") || hay.includes("passive") || hay.includes("active voice") || hay.includes("essay");
+  const isChem = hay.includes("chem") || hay.includes("periodic") || hay.includes("electronegativity");
+  const isMath =
+    hay.includes("factor") ||
+    hay.includes("algebra") ||
+    hay.includes("im2") ||
+    hay.includes("geometry") ||
+    hay.includes("precalc") ||
+    hay.includes("sat math");
+
+  if (isEnglish && (p.includes("factor:") || /x\s*²/.test(p) || p.includes("x^2"))) return true;
+  if (isChem && (p.includes("factor:") || p.includes("passive voice") || p.includes("active voice"))) return true;
+  if (isMath && (p.includes("passive voice") || p.includes("active voice") || p.includes("rewrite in"))) return true;
+  return false;
+}
+
 function filterFreshProblems(
   problems: PracticeProblem[],
   avoidPrompts: string[],
+  subject?: string,
+  topic?: string,
 ): PracticeProblem[] {
   const avoid = new Set(avoidPrompts.map(promptKey).filter(Boolean));
-  return problems.filter((p) => !avoid.has(promptKey(p.prompt)));
+  return problems.filter((p) => {
+    if (avoid.has(promptKey(p.prompt))) return false;
+    if (subject && topic && looksOffSubject(p.prompt, subject, topic)) return false;
+    return true;
+  });
 }
 
 function templateProblems(input: {
@@ -142,6 +169,134 @@ function templateProblems(input: {
   const id = () => crypto.randomUUID();
   const band = difficultyBand(input.mode);
   const avoid = new Set((input.avoidPrompts ?? []).map(promptKey));
+
+  if (
+    topic.includes("passive") ||
+    topic.includes("active voice") ||
+    topic.includes("essay") ||
+    (topic.includes("english") && topic.includes("voice"))
+  ) {
+    const voiceSets = [
+      [
+        {
+          prompt: 'Rewrite in active voice: "The essay was written by Maya overnight."',
+          answer: "Maya wrote the essay overnight.",
+        },
+        {
+          prompt: 'Rewrite in active voice: "The draft was revised by the peer tutor."',
+          answer: "The peer tutor revised the draft.",
+        },
+        {
+          prompt:
+            'Rewrite in active voice and keep the meaning: "Mistakes were made in the thesis statement."',
+          answer: "The student made mistakes in the thesis statement. (doer may be inferred)",
+        },
+      ],
+      [
+        {
+          prompt: 'Is this active or passive? "Ms. Rivera graded the essays." Explain why.',
+          answer: "Active — Ms. Rivera (subject) does the grading.",
+        },
+        {
+          prompt: 'Rewrite in passive voice: "Students submitted their outlines on Friday."',
+          answer: "The outlines were submitted by students on Friday.",
+        },
+        {
+          prompt:
+            'Fix the weak passive: "It was decided that the conclusion needed more evidence." Make it active and specific.',
+          answer: "The student decided the conclusion needed more evidence.",
+        },
+      ],
+      [
+        {
+          prompt: 'Rewrite in active voice: "The claim was supported by three quotes."',
+          answer: "Three quotes supported the claim. / The writer supported the claim with three quotes.",
+        },
+        {
+          prompt: 'Spot the passive verbs: "The paragraph was rewritten after feedback was given."',
+          answer: "was rewritten; was given",
+        },
+        {
+          prompt:
+            'Turn this into a strong active essay sentence: "Research was done on climate change by the class."',
+          answer: "The class researched climate change.",
+        },
+      ],
+    ];
+    let best = voiceSets[input.variant % voiceSets.length]!;
+    let bestOverlap = Infinity;
+    for (let i = 0; i < voiceSets.length; i++) {
+      const set = voiceSets[(input.variant + i) % voiceSets.length]!;
+      const overlap = set.filter((item) => avoid.has(promptKey(item.prompt))).length;
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap;
+        best = set;
+        if (overlap === 0) break;
+      }
+    }
+    return best.map((item, i) => ({
+      id: id(),
+      difficulty: band[i]!,
+      prompt: item.prompt,
+      steps: [
+        { label: "Find the doer", detail: "Ask who is performing the action." },
+        { label: "Rewrite", detail: `Model answer: ${item.answer}` },
+        { label: "Check", detail: "Confirm meaning stayed the same and the sentence is clearer." },
+      ],
+      discussionStems: [
+        "Who is doing the action in this sentence?",
+        "How does the active rewrite change the tone of the essay?",
+      ],
+    }));
+  }
+
+  if (topic.includes("periodic") || topic.includes("electronegativity") || topic.includes("ionization")) {
+    const chemSets = [
+      [
+        {
+          prompt: "Which has a larger atomic radius: Na or Cl? Explain using periodic trends.",
+          answer: "Na — fewer protons pull less tightly across the period.",
+        },
+        {
+          prompt: "Which is more electronegative: O or S? Why?",
+          answer: "O — same group, smaller radius / higher attraction higher up.",
+        },
+        {
+          prompt: "Why does ionization energy generally increase left→right across a period?",
+          answer: "Increasing nuclear charge holds electrons more tightly.",
+        },
+      ],
+      [
+        {
+          prompt: "Rank F, N, and C from lowest to highest electronegativity.",
+          answer: "C < N < F",
+        },
+        {
+          prompt: "Explain why K has a lower first ionization energy than Na.",
+          answer: "K’s valence electron is farther from the nucleus (more shells).",
+        },
+        {
+          prompt: "Predict which is smaller: Mg²⁺ or Na⁺. Explain.",
+          answer: "Mg²⁺ — same electron count, more protons → smaller radius.",
+        },
+      ],
+    ];
+    const set = chemSets[input.variant % chemSets.length]!;
+    return set.map((item, i) => ({
+      id: id(),
+      difficulty: band[i]!,
+      prompt: item.prompt,
+      steps: [
+        { label: "Locate", detail: "Find the elements on the periodic table." },
+        { label: "Apply trend", detail: item.answer },
+        { label: "Say why", detail: "Tie the answer to protons, shells, or attraction." },
+      ],
+      discussionStems: [
+        "What trend are we using?",
+        "Can you explain the trend without memorizing the answer?",
+      ],
+    }));
+  }
 
   const factorSets = [
     [
@@ -208,15 +363,15 @@ function templateProblems(input: {
   return band.map((d, i) => ({
     id: id(),
     difficulty: d,
-    prompt: `Practice ${i + 1} (${d}) on ${input.topic} [#${nonce}]: write and solve one new problem that matches today's goal.`,
+    prompt: `${input.subject} · ${input.topic} practice ${i + 1} (${d}) [#${nonce}]: create and complete one concrete task that matches today's goal — stay on this subject/topic only.`,
     steps: [
-      { label: "Frame", detail: `Restate the ${input.topic} idea in one sentence.` },
-      { label: "Try", detail: "Attempt the problem out loud, one step at a time." },
-      { label: "Check", detail: "Explain why the answer makes sense." },
+      { label: "Frame", detail: `Restate the ${input.topic} idea for ${input.subject} in one sentence.` },
+      { label: "Try", detail: "Attempt the task out loud, one step at a time." },
+      { label: "Check", detail: "Explain why the answer makes sense for this topic." },
     ],
     discussionStems: [
       "What is the first move you would make?",
-      "Where could a common mistake show up?",
+      "Where could a common mistake show up for this topic?",
     ],
   }));
 }
@@ -233,8 +388,8 @@ async function chatCompletion(messages: Array<{ role: string; content: string }>
     },
     body: JSON.stringify({
       model: practiceModel(),
-      temperature: 0.85,
-      max_tokens: 1600,
+      temperature: 0.7,
+      max_tokens: 2200,
       messages,
     }),
   });
@@ -299,6 +454,11 @@ export async function generatePracticeProblems(input: {
         content: [
           "You are TutorOS Practice Problem Generator for high-school peer tutoring.",
           "Generate NEW practice problems that are NOT duplicates of previous ones.",
+          "CRITICAL: Every prompt must be extremely specific to the given SUBJECT and TOPIC.",
+          "Never generate algebra/factoring problems for English. Never generate grammar for chemistry or math.",
+          "For English passive vs active voice: use concrete sentence rewrite / classify tasks.",
+          "For chemistry periodic trends: use radius / electronegativity / ionization comparisons.",
+          "For factoring: use quadratic factoring prompts only.",
           "Return ONLY valid JSON:",
           '{ "practiceProblems": [',
           "  {",
@@ -322,6 +482,7 @@ export async function generatePracticeProblems(input: {
           `Tutee: ${input.tuteeName}`,
           `Subject: ${input.subject}`,
           `Topic: ${input.topic}`,
+          "Hard constraint: stay on this subject/topic only.",
           `Difficulty mode: ${mode} (target band: ${band.join(" → ")})`,
           `Freshness nonce: ${variant}`,
           memorySummary(memory),
@@ -336,8 +497,8 @@ export async function generatePracticeProblems(input: {
     ]);
 
     if (!content) {
-      return filterFreshProblems(fallback, avoidPromptsMerged).length
-        ? filterFreshProblems(fallback, avoidPromptsMerged)
+      return filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic).length
+        ? filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic)
         : fallback;
     }
 
@@ -345,19 +506,23 @@ export async function generatePracticeProblems(input: {
     let problems = filterFreshProblems(
       parsePracticeProblems(parsed?.practiceProblems),
       avoidPromptsMerged,
+      input.subject,
+      input.topic,
     );
     if (problems.length < 3) {
-      const extras = filterFreshProblems(fallback, [
-        ...avoidPromptsMerged,
-        ...problems.map((p) => p.prompt),
-      ]);
+      const extras = filterFreshProblems(
+        fallback,
+        [...avoidPromptsMerged, ...problems.map((p) => p.prompt)],
+        input.subject,
+        input.topic,
+      );
       problems = [...problems, ...extras].slice(0, 3);
     }
     if (problems.length === 0) return fallback;
     return problems.slice(0, 3);
   } catch {
-    return filterFreshProblems(fallback, avoidPromptsMerged).length
-      ? filterFreshProblems(fallback, avoidPromptsMerged)
+    return filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic).length
+      ? filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic)
       : fallback;
   }
 }

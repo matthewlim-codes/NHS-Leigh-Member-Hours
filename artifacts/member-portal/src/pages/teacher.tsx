@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, LogOut, Users } from "lucide-react";
+import { Plus, LogOut, Users, Upload } from "lucide-react";
 import {
   completeTutoringRequest,
   createTutoringRequest,
@@ -56,11 +56,11 @@ export default function TeacherPortalPage() {
   const [whatChangedToday, setWhatChangedToday] = useState("");
   const [completing, setCompleting] = useState(false);
   const [materials, setMaterials] = useState<CourseMaterialUpload[]>([]);
-  const [materialText, setMaterialText] = useState("");
-  const [materialFilename, setMaterialFilename] = useState("worksheet.txt");
-  const [materialSubject, setMaterialSubject] = useState("Algebra II / IM2");
-  const [materialTopic, setMaterialTopic] = useState("factoring");
+  const [teacherInstructions, setTeacherInstructions] = useState("");
+  const [materialSubject, setMaterialSubject] = useState("English");
+  const [materialTopic, setMaterialTopic] = useState("essay writing · passive vs active voice");
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = async () => {
     try {
@@ -136,23 +136,7 @@ export default function TeacherPortalPage() {
 
   const onUploadMaterial = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!materialText.trim()) return;
-    setUploadingMaterial(true);
-    setError(null);
-    try {
-      await uploadCourseMaterial({
-        filename: materialFilename.trim() || "worksheet.txt",
-        text: materialText.trim(),
-        subject: materialSubject,
-        topic: materialTopic,
-      });
-      setMaterialText("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not upload worksheet");
-    } finally {
-      setUploadingMaterial(false);
-    }
+    fileInputRef.current?.click();
   };
 
   const onUploadFile = async (file: File | null) => {
@@ -165,15 +149,22 @@ export default function TeacherPortalPage() {
       let binary = "";
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
       const contentBase64 = btoa(binary);
-      const isText = file.type.startsWith("text/") || file.name.endsWith(".txt") || file.name.endsWith(".md");
+      const isText =
+        file.type.startsWith("text/") ||
+        file.name.endsWith(".txt") ||
+        file.name.endsWith(".md") ||
+        file.name.endsWith(".csv");
       await uploadCourseMaterial({
         filename: file.name,
         subject: materialSubject,
         topic: materialTopic,
+        teacherInstructions: teacherInstructions.trim() || undefined,
         contentBase64,
         contentType: file.type || "application/octet-stream",
         text: isText ? new TextDecoder().decode(bytes) : undefined,
       });
+      setTeacherInstructions("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not upload worksheet file");
@@ -226,6 +217,110 @@ export default function TeacherPortalPage() {
             Log out
           </button>
         </header>
+
+        <section className="mt-6" data-testid="teacher-materials">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900">Course materials</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Upload a worksheet (PDF, DOC, TXT, and more). Tutors see it in the session brief above
+              practice questions.
+            </p>
+
+            <form onSubmit={onUploadMaterial} className="mt-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Subject
+                  </span>
+                  <select
+                    value={materialSubject}
+                    onChange={(e) => setMaterialSubject(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  >
+                    {SUBJECTS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Topic
+                  </span>
+                  <input
+                    value={materialTopic}
+                    onChange={(e) => setMaterialTopic(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                    placeholder="passive vs active voice"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Teacher instructions
+                </span>
+                <textarea
+                  value={teacherInstructions}
+                  onChange={(e) => setTeacherInstructions(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-relaxed"
+                  placeholder="Special notes for the tutor — what to emphasize when reviewing this worksheet…"
+                  data-testid="input-teacher-instructions"
+                />
+              </label>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md,.csv,.html,.pptx,.xlsx,application/pdf"
+                className="hidden"
+                data-testid="input-material-file"
+                onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
+              />
+
+              <button
+                type="submit"
+                disabled={uploadingMaterial}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                data-testid="button-upload-material"
+              >
+                <Upload className="h-4 w-4" />
+                {uploadingMaterial ? "Uploading…" : "Upload file"}
+              </button>
+            </form>
+
+            {materials.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {materials.slice(0, 8).map((material, index) => (
+                  <li
+                    key={`${material.id ?? material.filename}-${index}`}
+                    className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-slate-900">{material.filename}</p>
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-700">
+                        {material.status}
+                      </span>
+                    </div>
+                    {(material.subject || material.topic) && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {[material.subject, material.topic].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                    {material.teacherInstructions && (
+                      <p className="mt-2 text-slate-700">
+                        <span className="font-semibold">Instructions: </span>
+                        {material.teacherInstructions}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
 
         <div className="mt-6 flex items-center gap-2">
           {(["all", "open", "claimed", "done"] as const).map((key) => (
@@ -457,114 +552,6 @@ export default function TeacherPortalPage() {
                       </div>
                     </div>
                   )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="mt-8" data-testid="teacher-materials">
-          <h2 className="text-lg font-bold text-slate-900">Course materials</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Upload worksheets into TutorOS RAG — tutors see them in prep briefs as seeded materials.
-          </p>
-
-          <form
-            onSubmit={onUploadMaterial}
-            className="mt-4 space-y-3 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Subject
-                </span>
-                <select
-                  value={materialSubject}
-                  onChange={(e) => setMaterialSubject(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
-                >
-                  {SUBJECTS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Topic
-                </span>
-                <input
-                  value={materialTopic}
-                  onChange={(e) => setMaterialTopic(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
-                  placeholder="factoring"
-                />
-              </label>
-            </div>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Filename
-              </span>
-              <input
-                value={materialFilename}
-                onChange={(e) => setMaterialFilename(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
-                placeholder="im2-factoring-worksheet.txt"
-              />
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Worksheet text
-              </span>
-              <textarea
-                value={materialText}
-                onChange={(e) => setMaterialText(e.target.value)}
-                rows={5}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-relaxed"
-                placeholder="Paste worksheet notes, example problems, or unit goals…"
-              />
-            </label>
-
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Or upload a file
-              </span>
-              <input
-                type="file"
-                accept=".txt,.md,.pdf,.doc,.docx,.csv,.html"
-                onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-emerald-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-emerald-700"
-                data-testid="input-material-file"
-              />
-            </label>
-
-            <button
-              type="submit"
-              disabled={uploadingMaterial || !materialText.trim()}
-              className="inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-              data-testid="button-upload-material"
-            >
-              {uploadingMaterial ? "Uploading…" : "Seed worksheet to RAG materials"}
-            </button>
-          </form>
-
-          {materials.length > 0 && (
-            <ul className="mt-4 space-y-2">
-              {materials.slice(0, 8).map((material, index) => (
-                <li
-                  key={`${material.filename}-${index}`}
-                  className="rounded-2xl bg-white px-4 py-3 text-sm shadow-sm shadow-slate-200/70"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-slate-900">{material.filename}</p>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold uppercase text-emerald-700">
-                      {material.status}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-slate-600">{material.preview}</p>
                 </li>
               ))}
             </ul>

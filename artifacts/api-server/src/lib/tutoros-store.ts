@@ -75,6 +75,13 @@ export interface PrepBrief {
   memoryEpisodes?: Array<{ topic: string; summary: string }>;
   /** Course-material snippets cited in prep (RAG) */
   materialsCited?: string[];
+  /** Teacher-uploaded worksheets the tutor should review with the student */
+  materialsToReview?: Array<{
+    id: string;
+    filename: string;
+    teacherInstructions?: string;
+    preview?: string;
+  }>;
   /** AI verify follow-ups when present on results */
   practiceNext?: string;
   aiSummary?: string;
@@ -397,7 +404,7 @@ function workedExampleStepsFor(
   adapted: boolean,
 ): Array<{ label: string; detail: string }> {
   const t = `${subject} ${topic}`.toLowerCase();
-  if (t.includes("factor") || t.includes("algebra")) {
+  if (t.includes("factor") || (t.includes("algebra") && !t.includes("english"))) {
     return adapted
       ? [
           { label: "Set up", detail: "Draw a 2×2 box for x² + 5x + 6." },
@@ -410,6 +417,48 @@ function workedExampleStepsFor(
           { label: "Check", detail: "Expand briefly to confirm the original expression." },
         ];
   }
+  if (
+    t.includes("passive") ||
+    t.includes("active voice") ||
+    t.includes("essay") ||
+    (t.includes("english") && t.includes("voice"))
+  ) {
+    return [
+      {
+        label: "Spot the passive",
+        detail:
+          'Show: "The essay was written by Maya." Ask who is doing the action (Maya) and what is receiving it (the essay).',
+      },
+      {
+        label: "Flip to active",
+        detail:
+          'Rewrite together: "Maya wrote the essay." Subject = doer, verb = action, object = receiver.',
+      },
+      {
+        label: "Check meaning",
+        detail:
+          "Confirm the rewrite keeps the same meaning and sounds more direct for an academic essay.",
+      },
+    ];
+  }
+  if (t.includes("periodic") || t.includes("electronegativity") || t.includes("ionization")) {
+    return [
+      {
+        label: "Locate the element",
+        detail: "Pick fluorine and sodium on the periodic table — opposite corners of period 2/3.",
+      },
+      {
+        label: "Compare trends",
+        detail:
+          "Across a period left→right: atomic radius shrinks, electronegativity and ionization energy rise.",
+      },
+      {
+        label: "Explain why",
+        detail:
+          "More protons pull the same energy level tighter — so F attracts electrons more strongly than Na.",
+      },
+    ];
+  }
   if (t.includes("sat") || t.includes("linear")) {
     return [
       { label: "Isolate the variable term", detail: "Add 7 to both sides: 3x − 7 + 7 = 11 + 7 → 3x = 18." },
@@ -418,9 +467,9 @@ function workedExampleStepsFor(
     ];
   }
   return [
-    { label: "Model", detail: `Walk through one ${topic} example together in ${subject}.` },
-    { label: "Coach", detail: "Have the student explain each step before writing." },
-    { label: "Transfer", detail: "Give a similar problem and let them try with hints." },
+    { label: "Model", detail: `Walk through one concrete ${topic} example together in ${subject}.` },
+    { label: "Coach", detail: `Have the student explain the ${topic} idea in their own words before writing.` },
+    { label: "Transfer", detail: `Give a near-transfer ${topic} task and coach while they try.` },
   ];
 }
 
@@ -429,10 +478,16 @@ export function buildExitProblem(subject: string, topic: string): string {
   if (t.includes("factor") || t.includes("algebra")) {
     return "Factor: x² + 7x + 12";
   }
+  if (t.includes("passive") || t.includes("active voice") || t.includes("essay")) {
+    return 'Rewrite in active voice: "The conclusion was written last."';
+  }
+  if (t.includes("periodic") || t.includes("electronegativity")) {
+    return "Which is more electronegative: N or P? Explain.";
+  }
   if (t.includes("linear")) {
     return "Solve: 2x + 5 = 17";
   }
-  return `Write one sentence explaining today's idea for ${topic}, then solve a similar practice problem.`;
+  return `Explain today's key idea for ${topic} in one sentence.`;
 }
 
 export function scoreVerification(input: {

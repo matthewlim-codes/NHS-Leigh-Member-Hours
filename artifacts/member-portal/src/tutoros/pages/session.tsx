@@ -251,6 +251,42 @@ export default function TutorOsSessionPage() {
               tuteeName={session.tuteeName}
             />
 
+            {(brief.materialsToReview?.length ?? 0) > 0 && (
+              <section
+                className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 px-4 py-4"
+                data-testid="materials-to-review"
+              >
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-slate-900">
+                    Review with the student
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Teacher-uploaded worksheets — go through these before generating practice
+                    questions.
+                  </p>
+                </div>
+                <ul className="space-y-3">
+                  {brief.materialsToReview!.map((material) => (
+                    <li
+                      key={material.id}
+                      className="rounded-xl border border-emerald-100 bg-white px-4 py-3 shadow-sm"
+                    >
+                      <p className="text-sm font-bold text-slate-900">{material.filename}</p>
+                      {material.teacherInstructions && (
+                        <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                          <span className="font-semibold text-emerald-800">Teacher note: </span>
+                          {material.teacherInstructions}
+                        </p>
+                      )}
+                      {material.preview && !material.teacherInstructions && (
+                        <p className="mt-2 text-sm text-slate-600">{material.preview}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <PracticeProblemsSection
               problems={brief.practiceProblems ?? []}
               generating={generatingProblems}

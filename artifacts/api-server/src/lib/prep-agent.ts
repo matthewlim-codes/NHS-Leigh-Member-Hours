@@ -8,6 +8,7 @@ import {
   isEverOSConfigured,
 } from "./everos-client";
 import { queryCourseMaterials } from "./verify-agent";
+import { materialsForSession } from "./materials-ingest";
 import {
   buildPrepBrief as buildTemplateBrief,
   getTuteeMemory,
@@ -123,9 +124,12 @@ async function chatCompletion(messages: Array<{ role: string; content: string }>
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.TUTOROS_AI_MODEL || "anthropic/claude-sonnet-4",
-      temperature: 0.7,
-      max_tokens: 1400,
+      model:
+        process.env.TUTOROS_PREP_AI_MODEL ||
+        process.env.TUTOROS_AI_MODEL ||
+        "anthropic/claude-sonnet-4.6",
+      temperature: 0.45,
+      max_tokens: 2200,
       messages,
     }),
   });
@@ -185,6 +189,10 @@ export async function generatePrepBrief(input: {
   }
 
   const materials = await queryCourseMaterials(`${input.subject} ${input.topic}`);
+  const materialsToReview = await materialsForSession({
+    subject: input.subject,
+    topic: input.topic,
+  });
 
   const template = buildTemplateBrief({
     tuteeName: input.tuteeName,
@@ -193,6 +201,8 @@ export async function generatePrepBrief(input: {
     memory,
     teacherNotes,
   });
+  template.materialsToReview = materialsToReview.length ? materialsToReview : undefined;
+  template.materialsCited = materials.slice(0, 2);
 
   const localEpisodes = (memory?.episodes ?? []).slice(0, 3).map((e) => ({
     topic: e.topic,
@@ -214,17 +224,23 @@ export async function generatePrepBrief(input: {
         role: "system",
         content: [
           "You are TutorOS Prep Agent — an expert peer-tutoring coach for high-school NHS tutors.",
+          "CRITICAL: Every bullet, step, example, and tip MUST be extremely specific to the given SUBJECT and TOPIC.",
+          "Never invent math/algebra content for English, chemistry, biology, or other non-math subjects.",
+          "Never invent English grammar content for math or science subjects.",
+          "If the topic is passive vs active voice, use concrete sentence rewrites — not equations.",
+          "If the topic is periodic trends, use electronegativity / radius / ionization examples — not grammar.",
+          "If the topic is factoring, use quadratic factoring examples — not essays.",
           "Your job: make sure today's session starts exactly where the last one ended.",
-          "Write practical, conversational coaching like ChatGPT/Claude: specific, warm, actionable.",
+          "Write practical, conversational coaching: specific, warm, actionable.",
           "Return ONLY valid JSON with keys:",
           '- contextTitle: string (e.g. "How to start" for first session, "Pick up where you left off" for follow-up)',
           "- contextBullets: string[] (3-5 bullets from LAST SESSION progress — do NOT repeat teacher assignment notes)",
-          "- approachBullets: string[] (3-4 bullets for today's teaching approach)",
-          '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps)',
-          "- misconceptionTips: string[] (2-4)",
+          "- approachBullets: string[] (3-4 bullets for today's teaching approach — subject-specific techniques)",
+          '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps walking ONE concrete example from THIS topic)',
+          "- misconceptionTips: string[] (2-4 misconceptions specific to this topic)",
           "- struggles: string[]",
           "- recommendedApproach: string",
-          "- workedExample: string",
+          "- workedExample: string (one concrete example from this subject/topic)",
           "- watchFors: string[]",
           "- coachNote: string (1-2 sentences: what changed last time + what to do first today)",
           "Teacher notes are provided separately — do not copy them into contextBullets.",
@@ -238,6 +254,8 @@ export async function generatePrepBrief(input: {
           `Subject: ${input.subject}`,
           `Topic: ${input.topic}`,
           "",
+          "Hard constraint: every example and step must be about the subject/topic above — nothing else.",
+          "",
           "TutorOS memory:",
           memoryContext(memory),
           teacherNotes.length
@@ -248,6 +266,14 @@ export async function generatePrepBrief(input: {
             : "",
           materials.length
             ? `\nCourse materials (RAG):\n${materials.map((n) => `- ${n.slice(0, 280)}`).join("\n")}`
+            : "",
+          materialsToReview.length
+            ? `\nTeacher-uploaded worksheets to review with the student:\n${materialsToReview
+                .map(
+                  (m) =>
+                    `- ${m.filename}${m.teacherInstructions ? ` — tutor note: ${m.teacherInstructions}` : ""}`,
+                )
+                .join("\n")}`
             : "",
           "",
           "Create a 2-minute pre-session instruction plan that continues from prior learning.",
@@ -262,12 +288,13 @@ export async function generatePrepBrief(input: {
         ...template,
         teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
         materialsCited: materials.slice(0, 2),
+        materialsToReview: materialsToReview.length ? materialsToReview : undefined,
         memoryEpisodes,
         memoryBadges: buildBadges({
           usedAi: false,
           everosCount: everosNotes.length,
           episodeCount,
-          hasMaterials: materials.length > 0,
+          hasMaterials: materials.length > 0 || materialsToReview.length > 0,
           hasTeacherNotes: teacherNotes.length > 0,
         }),
         memorySource: everosNotes.length ? "everos" : memory ? "demo" : "empty",
@@ -281,12 +308,13 @@ export async function generatePrepBrief(input: {
         coachNote: content.trim(),
         teacherNotes: teacherNotes.length ? teacherNotes : undefined,
         materialsCited: materials.slice(0, 2),
+        materialsToReview: materialsToReview.length ? materialsToReview : undefined,
         memoryEpisodes,
         memoryBadges: buildBadges({
           usedAi: true,
           everosCount: everosNotes.length,
           episodeCount,
-          hasMaterials: materials.length > 0,
+          hasMaterials: materials.length > 0 || materialsToReview.length > 0,
           hasTeacherNotes: teacherNotes.length > 0,
         }),
         memorySource: everosNotes.length ? "everos" : "ai",
@@ -338,12 +366,13 @@ export async function generatePrepBrief(input: {
         : template.misconceptionTips,
       teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
       materialsCited: materials.slice(0, 2),
+      materialsToReview: materialsToReview.length ? materialsToReview : undefined,
       memoryEpisodes,
       memoryBadges: buildBadges({
         usedAi: true,
         everosCount: everosNotes.length,
         episodeCount,
-        hasMaterials: materials.length > 0,
+        hasMaterials: materials.length > 0 || materialsToReview.length > 0,
         hasTeacherNotes: teacherNotes.length > 0,
       }),
       coachNote: coachNote || undefined,
@@ -355,12 +384,13 @@ export async function generatePrepBrief(input: {
       ...template,
       teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
       materialsCited: materials.slice(0, 2),
+      materialsToReview: materialsToReview.length ? materialsToReview : undefined,
       memoryEpisodes,
       memoryBadges: buildBadges({
         usedAi: false,
         everosCount: everosNotes.length,
         episodeCount,
-        hasMaterials: materials.length > 0,
+        hasMaterials: materials.length > 0 || materialsToReview.length > 0,
         hasTeacherNotes: teacherNotes.length > 0,
       }),
       memorySource: everosNotes.length ? "everos" : memory ? "demo" : "empty",

@@ -102,6 +102,87 @@ export function templatePracticeProblems(input: {
   const band = difficultyBand(mode);
   const avoidPrompts = input.avoidPrompts ?? [];
 
+  if (
+    topic.includes("passive") ||
+    topic.includes("active voice") ||
+    topic.includes("essay") ||
+    (topic.includes("english") && topic.includes("voice"))
+  ) {
+    return [
+      {
+        id: id(),
+        difficulty: band[0] ?? "basic",
+        prompt: 'Rewrite in active voice: "The essay was written by Maya overnight."',
+        steps: [
+          { label: "Find the doer", detail: "Maya is performing the action." },
+          { label: "Rewrite", detail: "Maya wrote the essay overnight." },
+        ],
+        discussionStems: ["Who is doing the action?", "Why is active voice stronger in essays?"],
+      },
+      {
+        id: id(),
+        difficulty: band[1] ?? "medium",
+        prompt: 'Rewrite in active voice: "The draft was revised by the peer tutor."',
+        steps: [
+          { label: "Find the doer", detail: "The peer tutor." },
+          { label: "Rewrite", detail: "The peer tutor revised the draft." },
+        ],
+        discussionStems: ["What changes when the subject becomes the doer?"],
+      },
+      {
+        id: id(),
+        difficulty: band[2] ?? "challenging",
+        prompt:
+          'Fix the weak passive: "It was decided that the conclusion needed more evidence." Make it active and specific.',
+        steps: [
+          { label: "Name the doer", detail: "Infer a concrete subject (the student / Maya)." },
+          {
+            label: "Rewrite",
+            detail: "The student decided the conclusion needed more evidence.",
+          },
+        ],
+        discussionStems: ["Why is 'it was decided' weak in academic writing?"],
+      },
+    ];
+  }
+
+  if (topic.includes("periodic") || topic.includes("electronegativity") || topic.includes("ionization")) {
+    return [
+      {
+        id: id(),
+        difficulty: band[0] ?? "basic",
+        prompt: "Which has a larger atomic radius: Na or Cl? Explain using periodic trends.",
+        steps: [
+          { label: "Locate", detail: "Na is left of Cl in period 3." },
+          { label: "Trend", detail: "Radius shrinks left→right — Na is larger." },
+        ],
+        discussionStems: ["What causes radius to shrink across a period?"],
+      },
+      {
+        id: id(),
+        difficulty: band[1] ?? "medium",
+        prompt: "Which is more electronegative: O or S? Why?",
+        steps: [
+          { label: "Same group", detail: "O is above S." },
+          { label: "Trend", detail: "Electronegativity rises up a group — O is higher." },
+        ],
+        discussionStems: ["How does distance from the nucleus affect attraction?"],
+      },
+      {
+        id: id(),
+        difficulty: band[2] ?? "challenging",
+        prompt: "Why does ionization energy generally increase left→right across a period?",
+        steps: [
+          {
+            label: "Explain",
+            detail: "Increasing nuclear charge holds electrons more tightly.",
+          },
+        ],
+        discussionStems: ["Can you use a specific pair of elements as an example?"],
+      },
+    ];
+  }
+
   if (topic.includes("factor") || topic.includes("algebra") || topic.includes("im2")) {
     const variant = FACTOR_VARIANTS[pickVariantIndex(avoidPrompts)]!;
     return variant.map((item, i) => ({
@@ -124,15 +205,15 @@ export function templatePracticeProblems(input: {
   return band.map((d, i) => ({
     id: id(),
     difficulty: d,
-    prompt: `Practice ${i + 1} (${d}) on ${input.topic} [#${nonce}]: write and solve one new problem that matches today's goal.`,
+    prompt: `${input.subject} · ${input.topic} practice ${i + 1} (${d}) [#${nonce}]: complete one concrete task for this subject/topic only.`,
     steps: [
-      { label: "Frame", detail: `Restate the ${input.topic} idea in one sentence.` },
-      { label: "Try", detail: "Attempt the problem out loud, one step at a time." },
-      { label: "Check", detail: "Explain why the answer makes sense." },
+      { label: "Frame", detail: `Restate the ${input.topic} idea for ${input.subject} in one sentence.` },
+      { label: "Try", detail: "Attempt the task out loud, one step at a time." },
+      { label: "Check", detail: "Explain why the answer makes sense for this topic." },
     ],
     discussionStems: [
       "What is the first move you would make?",
-      "Where could a common mistake show up?",
+      "Where could a common mistake show up for this topic?",
     ],
   }));
 }

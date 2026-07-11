@@ -172,9 +172,9 @@ function buildTemplateBrief(input: {
         "Hand off a similar problem and coach while they work.",
       ],
       workedExampleSteps: [
-        { label: "Model", detail: `Walk through one ${topic} example together in ${subject}.` },
-        { label: "Coach", detail: "Have the student explain each step before writing." },
-        { label: "Transfer", detail: "Give a similar problem and let them try with hints." },
+        { label: "Model", detail: `Walk through one concrete ${topic} example together in ${subject}.` },
+        { label: "Coach", detail: `Have the student explain the ${topic} idea in their own words before writing.` },
+        { label: "Transfer", detail: `Give a near-transfer ${topic} task and coach while they try.` },
       ],
       misconceptionTips: [
         "Ask them to explain the first step before solving.",
@@ -275,8 +275,14 @@ async function fetchAiPrepBrief(input: {
 function buildExitProblem(subject: string, topic: string): string {
   const t = `${subject} ${topic}`.toLowerCase();
   if (t.includes("factor") || t.includes("algebra")) return "Factor: x² + 7x + 12";
+  if (t.includes("passive") || t.includes("active voice") || t.includes("essay")) {
+    return 'Rewrite in active voice: "The conclusion was written last."';
+  }
+  if (t.includes("periodic") || t.includes("electronegativity")) {
+    return "Which is more electronegative: N or P? Explain.";
+  }
   if (t.includes("linear")) return "Solve: 2x + 5 = 17";
-  return `Write one sentence explaining today's idea for ${topic}, then solve a similar practice problem.`;
+  return `Explain today's key idea for ${topic} in one sentence.`;
 }
 
 function scoreVerification(input: {
@@ -478,9 +484,46 @@ export const localTutorOs = {
       memory,
     });
     const episodeCount = memory?.episodes.length ?? 0;
+    const materialsRaw = localStorage.getItem("tutoros-materials-v1");
+    let materialsToReview: PrepBrief["materialsToReview"] = [];
+    if (materialsRaw) {
+      try {
+        const all = JSON.parse(materialsRaw) as Array<{
+          id?: string;
+          filename: string;
+          subject?: string | null;
+          topic?: string | null;
+          teacherInstructions?: string | null;
+          preview?: string | null;
+        }>;
+        const subject = input.subject.toLowerCase();
+        const topic = input.topic.toLowerCase();
+        materialsToReview = all
+          .filter((m) => {
+            if (m.subject && !subject.includes(m.subject.toLowerCase()) && !m.subject.toLowerCase().includes(subject)) {
+              return false;
+            }
+            if (m.topic && !topic.includes(m.topic.toLowerCase()) && !m.topic.toLowerCase().includes(topic)) {
+              return false;
+            }
+            return true;
+          })
+          .slice(0, 8)
+          .map((m) => ({
+            id: m.id ?? crypto.randomUUID(),
+            filename: m.filename,
+            teacherInstructions: m.teacherInstructions?.trim() || undefined,
+            preview: m.preview?.trim() || undefined,
+          }));
+      } catch {
+        materialsToReview = [];
+      }
+    }
+
     const prepBrief = {
       ...(aiBrief ?? template),
       teacherNotes: teacherNotes.length ? teacherNotes : (aiBrief ?? template).teacherNotes,
+      materialsToReview: materialsToReview.length ? materialsToReview : undefined,
       memoryEpisodes: (memory?.episodes ?? []).slice(0, 3).map((e) => ({
         topic: e.topic,
         summary: e.headline ?? e.summary,
@@ -498,6 +541,9 @@ export const localTutorOs = {
           : [{ id: "new", label: "New learner", tone: "amber" as const }]),
         ...(teacherNotes.length
           ? [{ id: "teacher", label: "Teacher notes", tone: "violet" as const }]
+          : []),
+        ...(materialsToReview.length
+          ? [{ id: "materials", label: "Course materials", tone: "sky" as const }]
           : []),
       ],
       isAdapted: episodeCount > 0,

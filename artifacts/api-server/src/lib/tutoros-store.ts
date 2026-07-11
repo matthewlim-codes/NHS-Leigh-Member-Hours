@@ -39,6 +39,12 @@ export interface PracticeProblem {
   difficulty: PracticeProblemDifficulty;
 }
 
+export interface PrepMemoryBadge {
+  id: string;
+  label: string;
+  tone: "blue" | "emerald" | "slate" | "amber" | "violet" | "sky";
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
@@ -54,6 +60,15 @@ export interface PrepBrief {
   teacherNotes?: string[];
   /** AI-generated (or tutor-edited) practice problems for the session */
   practiceProblems?: PracticeProblem[];
+  /** Soft chips explaining how memory powered this brief */
+  memoryBadges?: PrepMemoryBadge[];
+  /** Short prior-episode summaries for the memory panel */
+  memoryEpisodes?: Array<{ topic: string; summary: string }>;
+  /** Course-material snippets cited in prep (RAG) */
+  materialsCited?: string[];
+  /** AI verify follow-ups when present on results */
+  practiceNext?: string;
+  aiSummary?: string;
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
@@ -268,9 +283,13 @@ export function buildPrepBrief(input: {
   subject: string;
   topic: string;
   memory: TuteeMemory | null;
+  teacherNotes?: string[];
 }): PrepBrief {
   const { tuteeName, subject, topic, memory } = input;
-  const teacherNotes = teacherNotesFromMemory(memory);
+  const teacherNotes = [
+    ...(input.teacherNotes ?? []),
+    ...teacherNotesFromMemory(memory),
+  ].filter(Boolean);
   if (!memory || memory.episodes.length === 0) {
     const contextBullets =
       teacherNotes.length > 0
@@ -461,18 +480,43 @@ export async function createSession(input: {
   tuteeName: string;
   subject: string;
   topic: string;
+  teacherNotes?: string[];
+  requestId?: string;
 }): Promise<TutorOsSession> {
   const tuteeSlug = slugifyTutee(input.tuteeName);
+
+  let teacherNotes = input.teacherNotes ?? [];
+  if (input.requestId) {
+    const request = await getTutoringRequest(input.requestId);
+    if (request) {
+      teacherNotes = [
+        ...teacherNotes,
+        `Assigned by ${request.assignedBy}`,
+        request.notes?.trim() || "",
+      ].filter(Boolean);
+    }
+  }
+
   const { generatePrepBrief } = await import("./prep-agent");
+  const { generateExitProblem, queryCourseMaterials } = await import("./verify-agent");
   const prepBrief = await generatePrepBrief({
     tuteeName: input.tuteeName,
     subject: input.subject,
     topic: input.topic,
     tuteeSlug,
+    teacherNotes,
   });
+  const materials =
+    prepBrief.materialsCited ??
+    (await queryCourseMaterials(`${input.subject} ${input.topic}`));
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
-  const exitProblem = buildExitProblem(input.subject, input.topic);
+  const exitProblem = await generateExitProblem({
+    tuteeName: input.tuteeName,
+    subject: input.subject,
+    topic: input.topic,
+    materials,
+  });
 
   const session: TutorOsSession = {
     id,
@@ -730,6 +774,113 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
   await upsertTuteeMemory(next);
 }
 
+export interface LearningMomentRecord {
+  id: string;
+  sessionId: string;
+  tuteeSlug: string;
+  tuteeName: string;
+  tutorUsername: string;
+  subject: string;
+  topic: string;
+  score: number | null;
+  headline: string | null;
+  summary: string | null;
+  practiceNext: string | null;
+  everosSaved: boolean;
+  learningMoment: boolean;
+  mismatch: boolean;
+  createdAt: string;
+}
+
+const learningMomentFallback: LearningMomentRecord[] = [];
+
+function mapLearningMomentRow(row: Record<string, unknown>): LearningMomentRecord {
+  return {
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    tuteeSlug: String(row.tutee_slug),
+    tuteeName: String(row.tutee_name),
+    tutorUsername: String(row.tutor_username),
+    subject: String(row.subject),
+    topic: String(row.topic),
+    score: typeof row.score === "number" ? row.score : null,
+    headline: (row.headline as string | null) ?? null,
+    summary: (row.summary as string | null) ?? null,
+    practiceNext: (row.practice_next as string | null) ?? null,
+    everosSaved: Boolean(row.everos_saved),
+    learningMoment: Boolean(row.learning_moment),
+    mismatch: Boolean(row.mismatch),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+export async function recordLearningMoment(input: {
+  session: TutorOsSession;
+  practiceNext?: string;
+  aiSummary?: string;
+  everosSaved?: boolean;
+}): Promise<LearningMomentRecord> {
+  const now = new Date().toISOString();
+  const record: LearningMomentRecord = {
+    id: crypto.randomUUID(),
+    sessionId: input.session.id,
+    tuteeSlug: input.session.tuteeSlug,
+    tuteeName: input.session.tuteeName,
+    tutorUsername: input.session.tutorUsername,
+    subject: input.session.subject,
+    topic: input.session.topic,
+    score: input.session.verifyScore ?? null,
+    headline: input.session.fusedHeadline ?? null,
+    summary: input.aiSummary ?? null,
+    practiceNext: input.practiceNext ?? null,
+    everosSaved: Boolean(input.everosSaved),
+    learningMoment: Boolean(input.session.learningMoment),
+    mismatch: Boolean(input.session.verifyMismatch),
+    createdAt: now,
+  };
+  learningMomentFallback.unshift(record);
+
+  try {
+    await bbFetch(`/learning_moments`, {
+      method: "POST",
+      body: JSON.stringify({
+        id: record.id,
+        session_id: record.sessionId,
+        tutee_slug: record.tuteeSlug,
+        tutee_name: record.tuteeName,
+        tutor_username: record.tutorUsername,
+        subject: record.subject,
+        topic: record.topic,
+        score: record.score,
+        headline: record.headline,
+        summary: record.summary,
+        practice_next: record.practiceNext,
+        everos_saved: record.everosSaved,
+        learning_moment: record.learningMoment,
+        mismatch: record.mismatch,
+      }),
+    });
+  } catch {
+    // fallback kept
+  }
+
+  return record;
+}
+
+export async function listLearningMoments(limit = 40): Promise<LearningMomentRecord[]> {
+  try {
+    const data = await bbFetch(
+      `/learning_moments?order=created_at.desc&limit=${Math.max(1, Math.min(100, limit))}`,
+    );
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((row) => mapLearningMomentRow(row as Record<string, unknown>));
+    }
+  } catch {
+    // fallback
+  }
+  return [...learningMomentFallback].slice(0, limit);
+}
+
 export type TutoringRequestStatus = "open" | "claimed" | "done";
 
 export interface TutoringRequest {
@@ -749,6 +900,24 @@ export interface TutoringRequest {
 }
 
 const requestFallback = new Map<string, TutoringRequest>();
+
+function mapRequestRow(row: Record<string, unknown>): TutoringRequest {
+  return {
+    id: String(row.id),
+    studentName: String(row.student_name),
+    grade: String(row.grade),
+    assignedBy: String(row.assigned_by),
+    subject: String(row.subject),
+    topic: String(row.topic),
+    notes: (row.notes as string | null) ?? null,
+    whatChangedToday: (row.what_changed_today as string | null) ?? null,
+    status: (row.status as TutoringRequestStatus) ?? "open",
+    claimedByUsername: (row.claimed_by_username as string | null) ?? null,
+    claimedAt: (row.claimed_at as string | null) ?? null,
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+  };
+}
 
 function seedTemplateRequests() {
   for (const demo of DEMO_TUTORING_REQUESTS) {
@@ -797,6 +966,24 @@ export async function createTutoringRequest(input: {
     updatedAt: now,
   };
   requestFallback.set(request.id, request);
+
+  try {
+    await bbFetch(`/tutoring_requests`, {
+      method: "POST",
+      body: JSON.stringify({
+        id: request.id,
+        student_name: request.studentName,
+        grade: request.grade,
+        assigned_by: request.assignedBy,
+        subject: request.subject,
+        topic: request.topic,
+        notes: request.notes,
+        status: request.status,
+      }),
+    });
+  } catch {
+    // fallback
+  }
   return request;
 }
 
@@ -804,12 +991,44 @@ export async function listTutoringRequests(filter?: {
   status?: TutoringRequestStatus;
 }): Promise<TutoringRequest[]> {
   seedTemplateRequests();
+  try {
+    let path = `/tutoring_requests?order=created_at.desc&limit=100`;
+    if (filter?.status) {
+      path += `&status=eq.${encodeURIComponent(filter.status)}`;
+    }
+    const data = await bbFetch(path);
+    if (Array.isArray(data) && data.length > 0) {
+      const mapped = data.map((row) => mapRequestRow(row as Record<string, unknown>));
+      for (const req of mapped) requestFallback.set(req.id, req);
+      // Ensure template demos remain visible if BB is empty of templates
+      for (const demo of DEMO_TUTORING_REQUESTS) {
+        if (!mapped.some((r) => r.id === demo.id) && !filter?.status) {
+          const local = requestFallback.get(demo.id);
+          if (local) mapped.push(local);
+        }
+      }
+      return mapped.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    }
+  } catch {
+    // fallback
+  }
+
   const all = Array.from(requestFallback.values());
   const filtered = filter?.status ? all.filter((r) => r.status === filter.status) : all;
   return filtered.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 export async function getTutoringRequest(id: string): Promise<TutoringRequest | null> {
+  try {
+    const data = await bbFetch(`/tutoring_requests?id=eq.${encodeURIComponent(id)}&limit=1`);
+    if (Array.isArray(data) && data[0]) {
+      const mapped = mapRequestRow(data[0] as Record<string, unknown>);
+      requestFallback.set(id, mapped);
+      return mapped;
+    }
+  } catch {
+    // fallback
+  }
   return requestFallback.get(id) ?? null;
 }
 
@@ -817,7 +1036,7 @@ export async function claimTutoringRequest(
   id: string,
   tutorUsername: string,
 ): Promise<TutoringRequest | null> {
-  const existing = requestFallback.get(id);
+  const existing = (await getTutoringRequest(id)) ?? requestFallback.get(id);
   if (!existing || existing.status !== "open") return null;
   const now = new Date().toISOString();
   const updated: TutoringRequest = {
@@ -828,6 +1047,19 @@ export async function claimTutoringRequest(
     updatedAt: now,
   };
   requestFallback.set(id, updated);
+  try {
+    await bbFetch(`/tutoring_requests?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: updated.status,
+        claimed_by_username: updated.claimedByUsername,
+        claimed_at: updated.claimedAt,
+        updated_at: updated.updatedAt,
+      }),
+    });
+  } catch {
+    // fallback
+  }
   return updated;
 }
 
@@ -835,7 +1067,7 @@ export async function completeTutoringRequest(
   id: string,
   input?: { whatChangedToday?: string },
 ): Promise<TutoringRequest | null> {
-  const existing = requestFallback.get(id);
+  const existing = (await getTutoringRequest(id)) ?? requestFallback.get(id);
   if (!existing) return null;
   const updated: TutoringRequest = {
     ...existing,
@@ -844,6 +1076,18 @@ export async function completeTutoringRequest(
     updatedAt: new Date().toISOString(),
   };
   requestFallback.set(id, updated);
+  try {
+    await bbFetch(`/tutoring_requests?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: updated.status,
+        what_changed_today: updated.whatChangedToday,
+        updated_at: updated.updatedAt,
+      }),
+    });
+  } catch {
+    // fallback
+  }
   return updated;
 }
 

@@ -102,7 +102,29 @@ export function buildJordanLeeMemory(): DemoTuteeMemorySeed {
 
 export function buildDemoTuteeMemoryMap(): Record<string, DemoTuteeMemorySeed> {
   const jordan = buildJordanLeeMemory();
-  return { [jordan.tuteeSlug]: jordan };
+  const maria: DemoTuteeMemorySeed = {
+    tuteeSlug: "maria",
+    tuteeName: "Maria",
+    profile: {
+      grade: "10",
+      preferredApproach: "visual / box method",
+      struggles: ["sign errors when factoring", "jumps to FOIL without structure"],
+      skills: ["needs guidance on factoring quadratics"],
+      teacherNotes: ["Returning learner — continue from last factoring session."],
+    },
+    episodes: [
+      {
+        topic: "factoring quadratics",
+        summary:
+          "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5. What changed: started trying the box method.",
+        outcome: "struggled",
+        approach: "formula-first",
+        when: "2026-07-10",
+        score: 2,
+      },
+    ],
+  };
+  return { [jordan.tuteeSlug]: jordan, maria: maria };
 }
 
 export function teacherNotesFromMemory(

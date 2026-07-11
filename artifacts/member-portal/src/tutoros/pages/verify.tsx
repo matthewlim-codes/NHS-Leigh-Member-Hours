@@ -50,27 +50,47 @@ export default function TutorOsVerifyPage() {
   };
 
   if (done) {
+    const practiceNext =
+      done.prepBrief?.practiceNext ||
+      (typeof done.memoryNotes?.practiceNext === "string"
+        ? done.memoryNotes.practiceNext
+        : null);
+    const aiSummary =
+      done.prepBrief?.aiSummary ||
+      (typeof done.memoryNotes?.aiSummary === "string" ? done.memoryNotes.aiSummary : null);
+
     return (
       <TutorOsShell>
         <TutorOsHeader title="Learning moment" onBack={() => setLocation("/tutoros")} />
-        <div className="px-5 py-8 text-center space-y-4">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 text-3xl font-bold">
+        <div className="px-5 py-8 text-center space-y-5">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 text-3xl font-bold shadow-sm shadow-emerald-100">
             {done.verifyScore}/5
           </div>
           <h2 className="text-2xl font-bold text-slate-900">
             {done.learningMoment ? "Verified learning moment" : "Session recorded"}
           </h2>
           {done.fusedHeadline && (
-            <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-[#1865F2]">
+            <p className="rounded-2xl bg-blue-50/80 px-4 py-3 text-sm font-medium text-[#1865F2] shadow-sm shadow-blue-100">
               What changed: {done.fusedHeadline}
             </p>
           )}
-          <p className="text-sm text-slate-600 leading-relaxed">
+          {aiSummary && (
+            <p className="text-sm leading-relaxed text-slate-600">{aiSummary}</p>
+          )}
+          {practiceNext && (
+            <div className="rounded-2xl bg-white px-4 py-3 text-left shadow-sm shadow-slate-200/70">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Practice next
+              </p>
+              <p className="mt-1 text-sm text-slate-700">{practiceNext}</p>
+            </div>
+          )}
+          <p className="text-sm text-slate-500 leading-relaxed">
             {done.verifyMismatch
-              ? "Flagged for officers: tutor rubric and student score disagreed."
+              ? "Flagged: tutor rubric and student score disagreed."
               : done.learningMoment
-                ? "Evidence fused into memory. Next prep brief for this tutee will be sharper."
-                : "Hours can still count. Learning moments require a stronger verify match."}
+                ? "Saved to learning memory. Next prep for this student will continue from here."
+                : "Hours can still count. Stronger verify unlocks a learning moment."}
           </p>
           <PrimaryButton onClick={() => setLocation("/tutoros")}>Done</PrimaryButton>
         </div>
@@ -82,17 +102,17 @@ export default function TutorOsVerifyPage() {
     <TutorOsShell showBottomNav={false}>
       <TutorOsHeader title="Verify" onBack={() => setLocation(session ? `/tutoros/session/${session.id}` : "/tutoros")} />
       <form onSubmit={onSubmit} className="px-5 py-5 space-y-5">
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <div className="rounded-2xl bg-slate-50/80 px-4 py-4 shadow-sm shadow-slate-200/50">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
             Student check-in · ~30 seconds
           </p>
-          <p className="mt-2 text-sm text-slate-700">
+          <p className="mt-2 text-sm text-slate-600">
             No account needed. Hand the phone to{" "}
-            <span className="font-semibold">{session?.tuteeName ?? "your tutee"}</span>.
+            <span className="font-semibold text-slate-800">{session?.tuteeName ?? "your tutee"}</span>.
           </p>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
+        <div className="space-y-4 rounded-2xl bg-white px-4 py-4 shadow-sm shadow-slate-200/70">
           <div>
             <h3 className="font-bold text-slate-900">Your reflection</h3>
             <p className="mt-1 text-sm text-slate-600">

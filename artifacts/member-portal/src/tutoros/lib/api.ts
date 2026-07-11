@@ -36,6 +36,12 @@ export interface PracticeProblem {
   difficulty: PracticeProblemDifficulty;
 }
 
+export interface PrepMemoryBadge {
+  id: string;
+  label: string;
+  tone: "blue" | "emerald" | "slate" | "amber" | "violet" | "sky";
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
@@ -56,6 +62,11 @@ export interface PrepBrief {
   teacherNotes?: string[];
   /** AI-generated (or tutor-edited) practice problems */
   practiceProblems?: PracticeProblem[];
+  memoryBadges?: PrepMemoryBadge[];
+  memoryEpisodes?: Array<{ topic: string; summary: string }>;
+  materialsCited?: string[];
+  practiceNext?: string;
+  aiSummary?: string;
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
@@ -198,6 +209,8 @@ export function startSession(input: {
   tuteeName: string;
   subject: string;
   topic: string;
+  requestId?: string;
+  teacherNotes?: string[];
 }) {
   return withFallback(
     () =>
@@ -339,6 +352,31 @@ export function completeTutoringRequest(id: string, input: { whatChangedToday: s
         body: JSON.stringify(input),
       }),
     () => localTutorOs.completeTutoringRequest(id, input),
+  );
+}
+
+export interface LearningMoment {
+  id: string;
+  sessionId: string;
+  tuteeSlug: string;
+  tuteeName: string;
+  tutorUsername: string;
+  subject: string;
+  topic: string;
+  score: number | null;
+  headline: string | null;
+  summary: string | null;
+  practiceNext: string | null;
+  everosSaved: boolean;
+  learningMoment: boolean;
+  mismatch: boolean;
+  createdAt: string;
+}
+
+export function listLearningMoments() {
+  return withFallback(
+    () => api<{ moments: LearningMoment[] }>("/tutoros/learning-moments"),
+    () => localTutorOs.listLearningMoments(),
   );
 }
 

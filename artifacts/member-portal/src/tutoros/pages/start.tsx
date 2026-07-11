@@ -31,11 +31,11 @@ export default function TutorOsStartPage() {
     [search],
   );
 
-  const [tuteeName, setTuteeName] = useState(prefill.tutee || "Maria");
+  const [tuteeName, setTuteeName] = useState(prefill.tutee || "Maria Garcia");
   const [subject, setSubject] = useState(
     SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II",
   );
-  const [topic, setTopic] = useState(prefill.topic || "factoring");
+  const [topic, setTopic] = useState(prefill.topic || "factoring quadratics");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +76,7 @@ export default function TutorOsStartPage() {
             value={tuteeName}
             onChange={(e) => setTuteeName(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="Maria"
+            placeholder="Maria Garcia"
             required
           />
         </label>
@@ -105,7 +105,7 @@ export default function TutorOsStartPage() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="factoring"
+            placeholder="factoring quadratics"
             required
           />
         </label>

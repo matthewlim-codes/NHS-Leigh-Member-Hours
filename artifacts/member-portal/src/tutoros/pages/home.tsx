@@ -151,7 +151,7 @@ export default function TutorOsHomePage() {
           </div>
           {recent.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              No sessions yet. Try the demo: Maria · Algebra II · factoring.
+              No sessions yet. Try the demo: Maria Garcia · Algebra II · factoring quadratics.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">

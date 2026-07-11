@@ -7,9 +7,15 @@ import type {
   TutoringRequest,
   TutoringRequestStatus,
 } from "./api";
+import {
+  buildDemoTuteeMemoryMap,
+  DEMO_TUTORING_REQUESTS,
+  slugifyTutee,
+  teacherNotesFromMemory,
+} from "./demo-data";
 
 const SESSIONS_KEY = "tutoros-sessions-v1";
-const MEMORY_KEY = "tutoros-memory-v1";
+const MEMORY_KEY = "tutoros-memory-v2";
 const REQUESTS_KEY = "tutoros-requests-v1";
 const PREP_FN_URL = "https://api.butterbase.ai/v1/app_tsc2mvlq21yo/fn/prep-brief";
 
@@ -20,6 +26,10 @@ interface TuteeMemory {
     preferredApproach?: string;
     struggles?: string[];
     skills?: string[];
+    teacherNotes?: string[];
+    grade?: string;
+    assignedBy?: string;
+    [key: string]: unknown;
   };
   episodes: Array<{
     topic: string;
@@ -31,7 +41,7 @@ interface TuteeMemory {
 }
 
 function slugify(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return slugifyTutee(name);
 }
 
 function readSessions(): TutorOsSession[] {
@@ -39,7 +49,19 @@ function readSessions(): TutorOsSession[] {
     const raw = localStorage.getItem(SESSIONS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as TutorOsSession[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    const filtered = parsed.filter(
+      (s) =>
+        !(
+          (s.tuteeSlug === "maria" || s.tuteeSlug === "maria-garcia") &&
+          (s.tutorUsername === "Matthew-Lim" || s.tutorUsername === "local-tutor")
+        ),
+    );
+    if (filtered.length !== parsed.length) {
+      writeSessions(filtered);
+    }
+    return filtered;
   } catch {
     return [];
   }
@@ -52,11 +74,11 @@ function writeSessions(sessions: TutorOsSession[]) {
 function readMemoryMap(): Record<string, TuteeMemory> {
   try {
     const raw = localStorage.getItem(MEMORY_KEY);
-    if (!raw) return seedMaria();
+    if (!raw) return seedDemoMemory();
     const parsed = JSON.parse(raw) as Record<string, TuteeMemory>;
-    return parsed && typeof parsed === "object" ? { ...seedMaria(), ...parsed } : seedMaria();
+    return parsed && typeof parsed === "object" ? { ...seedDemoMemory(), ...parsed } : seedDemoMemory();
   } catch {
-    return seedMaria();
+    return seedDemoMemory();
   }
 }
 
@@ -64,28 +86,8 @@ function writeMemoryMap(map: Record<string, TuteeMemory>) {
   localStorage.setItem(MEMORY_KEY, JSON.stringify(map));
 }
 
-function seedMaria(): Record<string, TuteeMemory> {
-  return {
-    maria: {
-      tuteeSlug: "maria",
-      tuteeName: "Maria",
-      profile: {
-        preferredApproach: "visual / box method",
-        struggles: ["sign errors when factoring", "jumps to FOIL without structure"],
-        skills: ["needs guidance on factoring quadratics"],
-      },
-      episodes: [
-        {
-          topic: "factoring quadratics",
-          summary:
-            "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5.",
-          outcome: "struggled",
-          approach: "formula-first",
-          score: 2,
-        },
-      ],
-    },
-  };
+function seedDemoMemory(): Record<string, TuteeMemory> {
+  return buildDemoTuteeMemoryMap();
 }
 
 function buildTemplateBrief(input: {
@@ -95,20 +97,24 @@ function buildTemplateBrief(input: {
   memory: TuteeMemory | null;
 }): PrepBrief {
   const { tuteeName, subject, topic, memory } = input;
+  const teacherNotes = teacherNotesFromMemory(memory);
   if (!memory || memory.episodes.length === 0) {
+    const contextBullets =
+      teacherNotes.length > 0
+        ? teacherNotes
+        : [`Teacher focus area: ${topic}`, "Check in on confidence before diving into problems."];
     return {
-      struggles: [`No prior TutorOS memory for ${tuteeName} yet.`],
+      struggles: Array.isArray(memory?.profile.struggles)
+        ? memory.profile.struggles.map(String)
+        : [`No prior TutorOS memory for ${tuteeName} yet.`],
       recommendedApproach: "Confidence-building warm-up, then one guided example.",
       workedExample: `Walk one worked example for ${topic} in ${subject} together, then ask the student to try a near-transfer problem.`,
       watchFors: [
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
-      contextTitle: "What they need help with",
-      contextBullets: [
-        `Teacher focus area: ${topic}`,
-        "Check in on confidence before diving into problems.",
-      ],
+      contextTitle: teacherNotes.length > 0 ? "What the teacher noted" : "What they need help with",
+      contextBullets,
       approachBullets: [
         "Open with a quick warm-up question on a prerequisite skill.",
         "Model one example out loud, narrating each step.",
@@ -123,8 +129,9 @@ function buildTemplateBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
+      teacherNotes: teacherNotes.length > 0 ? teacherNotes : undefined,
       coachNote: `You're meeting ${tuteeName} for ${subject} on ${topic}. Start with a quick confidence check, teach one clear example out loud, then hand them a similar problem while you coach. Keep the session interactive — have them narrate each step.`,
-      memorySource: "empty",
+      memorySource: teacherNotes.length > 0 ? "demo" : "empty",
       isAdapted: false,
     };
   }
@@ -299,12 +306,46 @@ function rememberAfterVerify(session: TutorOsSession) {
       preferredApproach:
         session.verifyScore >= 3
           ? "visual / box method"
-          : existing.profile.preferredApproach ?? "visual / box method",
+          : existing.profile.preferredApproach ?? "visual / step-by-step",
       skills: skills.slice(0, 8),
     },
     episodes: [episode, ...existing.episodes].slice(0, 20),
   };
   writeMemoryMap(map);
+}
+
+function seedDemoRequests(): TutoringRequest[] {
+  const now = new Date().toISOString();
+  return DEMO_TUTORING_REQUESTS.map((demo) => ({
+    id: demo.id,
+    studentName: demo.studentName,
+    grade: demo.grade,
+    assignedBy: demo.assignedBy,
+    subject: demo.subject,
+    topic: demo.topic,
+    notes: demo.notes,
+    status: "open" as const,
+    claimedByUsername: null,
+    claimedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
+function readRequests(): TutoringRequest[] {
+  try {
+    const raw = localStorage.getItem(REQUESTS_KEY);
+    if (!raw) return seedDemoRequests();
+    const parsed = JSON.parse(raw) as TutoringRequest[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return seedDemoRequests();
+    return parsed;
+  } catch {
+    return seedDemoRequests();
+  }
+}
+
+function writeRequests(requests: TutoringRequest[]) {
+  localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
 }
 
 export const localTutorOs = {
@@ -436,6 +477,27 @@ export const localTutorOs = {
     return updated;
   },
 
+  purgeSessions(input: { tuteeName?: string; tuteeSlug?: string } = {}): {
+    deleted: number;
+    ids: string[];
+  } {
+    const sessions = readSessions();
+    const kept = sessions.filter((s) => {
+      if (input.tuteeSlug && s.tuteeSlug !== input.tuteeSlug) return true;
+      if (
+        input.tuteeName &&
+        s.tuteeName.trim().toLowerCase() !== input.tuteeName.trim().toLowerCase()
+      ) {
+        return true;
+      }
+      if (!input.tuteeSlug && !input.tuteeName) return false;
+      return false;
+    });
+    const deletedIds = sessions.filter((s) => !kept.includes(s)).map((s) => s.id);
+    writeSessions(kept);
+    return { deleted: deletedIds.length, ids: deletedIds };
+  },
+
   listTutoringRequests(filter?: {
     status?: TutoringRequestStatus;
   }): { requests: TutoringRequest[] } {
@@ -495,18 +557,3 @@ export const localTutorOs = {
     return all[idx];
   },
 };
-
-function readRequests(): TutoringRequest[] {
-  try {
-    const raw = localStorage.getItem(REQUESTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as TutoringRequest[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeRequests(requests: TutoringRequest[]) {
-  localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
-}

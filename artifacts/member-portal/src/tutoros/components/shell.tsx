@@ -1,23 +1,29 @@
 import { Link, useLocation } from "wouter";
-import { Bookmark, Compass, Home, Settings } from "lucide-react";
+import { ClipboardList, Home, PlayCircle, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { href: "/tutoros", label: "Home", icon: Home, match: (path: string) => path === "/tutoros" },
+  { href: "/tutoros", label: "Home", icon: Home, match: (p: string) => p === "/tutoros" },
   {
-    href: "/tutoros/explore",
-    label: "Explore",
-    icon: Compass,
-    match: (path: string) =>
-      path.startsWith("/tutoros/explore") ||
-      path.startsWith("/tutoros/subjects") ||
-      path.startsWith("/tutoros/courses"),
+    href: "/tutoros/start",
+    label: "Session",
+    icon: PlayCircle,
+    match: (p: string) =>
+      p.startsWith("/tutoros/start") ||
+      p.startsWith("/tutoros/session") ||
+      p.startsWith("/tutoros/verify"),
   },
   {
-    href: "/tutoros/bookmarks",
-    label: "Bookmarks",
-    icon: Bookmark,
-    match: (path: string) => path.startsWith("/tutoros/bookmarks"),
+    href: "/tutoros/history",
+    label: "History",
+    icon: ClipboardList,
+    match: (p: string) => p.startsWith("/tutoros/history"),
+  },
+  {
+    href: "/tutoros/command",
+    label: "Command",
+    icon: Shield,
+    match: (p: string) => p.startsWith("/tutoros/command"),
   },
 ] as const;
 
@@ -41,7 +47,7 @@ export function TutorOsShell({
           className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur"
           aria-label="TutorOS"
         >
-          <div className="mx-auto max-w-lg grid grid-cols-4 h-16">
+          <div className="mx-auto max-w-lg grid grid-cols-5 h-16">
             {tabs.map((tab) => {
               const active = tab.match(location);
               const Icon = tab.icon;
@@ -50,7 +56,7 @@ export function TutorOsShell({
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
+                    "flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
                     active ? "text-[#1865F2]" : "text-slate-500 hover:text-slate-800",
                   )}
                   aria-current={active ? "page" : undefined}
@@ -62,9 +68,9 @@ export function TutorOsShell({
             })}
             <Link
               href="/dashboard"
-              className="flex flex-col items-center justify-center gap-0.5 text-xs font-medium text-slate-500 hover:text-slate-800 transition-colors"
+              className="flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-800 transition-colors"
             >
-              <Settings className="h-5 w-5" />
+              <span className="text-base font-bold leading-none">H</span>
               Hours
             </Link>
           </div>
@@ -119,6 +125,25 @@ export function PrimaryButton({
       type="button"
       className={cn(
         "inline-flex w-full items-center justify-center rounded-full bg-[#1865F2] px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-[#1557d0] disabled:opacity-60",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function SecondaryButton({
+  children,
+  className,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60",
         className,
       )}
       {...props}

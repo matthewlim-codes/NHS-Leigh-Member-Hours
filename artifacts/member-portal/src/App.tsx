@@ -8,8 +8,18 @@ import NotFound from "@/pages/not-found";
 
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import TutorOsHomePage from "@/tutoros/pages/home";
+import TutorOsExplorePage from "@/tutoros/pages/explore";
+import TutorOsBookmarksPage from "@/tutoros/pages/bookmarks";
+import TutorOsSubjectPage from "@/tutoros/pages/subject";
+import TutorOsCoursePage from "@/tutoros/pages/course";
+import TutorOsUnitPage from "@/tutoros/pages/unit";
 
 const queryClient = new QueryClient();
+
+function isPublicPath(location: string) {
+  return location === "/login";
+}
 
 // Auth redirect handler to properly route the user based on state initially
 function AuthGate({ children }: { children: React.ReactNode }) {
@@ -25,14 +35,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
     
     // If not logged in and not on login page, redirect to login
-    if (isError && location !== "/login") {
+    if (isError && !isPublicPath(location)) {
       setLocation("/login");
       return;
     }
     
     if (isSuccess && user) {
       if (location === "/login" || location === "/") {
-        setLocation("/dashboard");
+        setLocation("/tutoros");
       }
     }
   }, [isLoading, isError, isSuccess, user, location, setLocation]);
@@ -53,6 +63,12 @@ function Router() {
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/tutoros/courses/:courseId/units/:unitId" component={TutorOsUnitPage} />
+      <Route path="/tutoros/courses/:courseId" component={TutorOsCoursePage} />
+      <Route path="/tutoros/subjects/:subjectId" component={TutorOsSubjectPage} />
+      <Route path="/tutoros/explore" component={TutorOsExplorePage} />
+      <Route path="/tutoros/bookmarks" component={TutorOsBookmarksPage} />
+      <Route path="/tutoros" component={TutorOsHomePage} />
       <Route path="/" component={() => null} />
       <Route component={NotFound} />
     </Switch>

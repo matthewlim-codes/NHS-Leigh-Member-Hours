@@ -30,7 +30,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isSuccess && user) {
-      setLocation("/dashboard");
+      setLocation("/tutoros");
     }
   }, [isSuccess, user, setLocation]);
 
@@ -50,7 +50,7 @@ export default function LoginPage() {
       {
         onSuccess: (data) => {
           queryClient.setQueryData(getGetMeQueryKey(), data);
-          setLocation("/dashboard");
+          setLocation("/tutoros");
         },
       }
     );
@@ -69,7 +69,7 @@ export default function LoginPage() {
             Leigh NHS Member Portal
           </h1>
           <p className="text-muted-foreground mt-2" data-testid="text-login-subtitle">
-            Sign in to access your volunteer dashboard
+            Sign in to access TutorOS and your volunteer dashboard
           </p>
         </div>
 

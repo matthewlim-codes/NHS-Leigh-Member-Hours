@@ -11,6 +11,11 @@ export type SessionStatus = "prep" | "active" | "awaiting_verify" | "verified" |
 export type TutorRubric = "independent" | "with_hints" | "not_yet";
 export type SessionType = "hw_center" | "tutorial";
 
+export interface WorkedExampleStep {
+  label: string;
+  detail: string;
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
@@ -18,6 +23,12 @@ export interface PrepBrief {
   watchFors: string[];
   /** Natural-language coaching paragraph from the LLM prep agent */
   coachNote?: string;
+  contextTitle?: string;
+  contextBullets?: string[];
+  approachBullets?: string[];
+  workedExampleSteps?: WorkedExampleStep[];
+  misconceptionTips?: string[];
+  teacherNotes?: string[];
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
@@ -31,7 +42,8 @@ export interface TutorOsSession {
   topic: string;
   status: SessionStatus;
   prepBrief: PrepBrief;
-  startedAt: string;
+  startedAt?: string | null;
+  timerStarted?: boolean;
   endedAt?: string | null;
   durationMinutes?: number | null;
   sessionType?: SessionType | null;
@@ -135,7 +147,8 @@ function mapSessionRow(row: Record<string, unknown>): TutorOsSession {
     topic: String(row.topic),
     status: row.status as SessionStatus,
     prepBrief: (row.prep_brief as PrepBrief) ?? emptyBrief(),
-    startedAt: String(row.started_at ?? row.created_at),
+    startedAt: (row.started_at as string | null) ?? null,
+    timerStarted: Boolean(row.timer_started ?? row.started_at),
     endedAt: (row.ended_at as string | null) ?? null,
     durationMinutes: (row.duration_minutes as number | null) ?? null,
     sessionType: (row.session_type as SessionType | null) ?? null,
@@ -236,6 +249,21 @@ export function buildPrepBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
+      contextTitle: "What they need help with",
+      contextBullets: [
+        `Teacher focus area: ${topic}`,
+        "Check in on confidence before diving into problems.",
+      ],
+      approachBullets: [
+        "Open with a quick warm-up question on a prerequisite skill.",
+        "Model one example out loud, narrating each step.",
+        "Hand off a similar problem and coach while they work.",
+      ],
+      workedExampleSteps: workedExampleStepsFor(subject, topic, false),
+      misconceptionTips: [
+        "Ask them to explain the first step before solving.",
+        "Stop and re-teach if they freeze for >20 seconds.",
+      ],
       memorySource: "empty",
       isAdapted: false,
     };
@@ -268,22 +296,68 @@ export function buildPrepBrief(input: {
         ? "Avoid jumping straight to formulas — start with the box method."
         : "Confirm they can transfer the approach to a new problem.",
     ],
+    contextTitle: "Last session review",
+    contextBullets: [
+      `Last time: ${episode.summary}`,
+      `Strategy that helped: ${preferred}`,
+      episode.outcome === "improved"
+        ? "What worked: visual structure kept them on track."
+        : "What to adjust: slow down before independent practice.",
+    ],
+    approachBullets: [
+      `Start with ${preferred} — it worked before for ${tuteeName}.`,
+      "Ask what they remember from last session before re-teaching.",
+      "Give one guided example, then a near-transfer problem.",
+    ],
+    workedExampleSteps: workedExampleStepsFor(subject, topic, true),
+    misconceptionTips: [
+      "Watch for the same mistake from last time.",
+      "Have them narrate each step out loud.",
+      episode.approach === "formula-first"
+        ? "Avoid jumping straight to formulas — start with the box method."
+        : "Confirm they can transfer the approach to a new problem.",
+    ],
     memorySource: "demo",
     isAdapted: true,
   };
 }
 
 function workedExampleFor(subject: string, topic: string, adapted: boolean): string {
+  const steps = workedExampleStepsFor(subject, topic, adapted);
+  return steps.map((s) => s.detail).join(" → ");
+}
+
+function workedExampleStepsFor(
+  subject: string,
+  topic: string,
+  adapted: boolean,
+): Array<{ label: string; detail: string }> {
   const t = `${subject} ${topic}`.toLowerCase();
   if (t.includes("factor") || t.includes("algebra")) {
     return adapted
-      ? "Box method for x² + 5x + 6: fill the box with factors of 6 that sum to 5 → (x+2)(x+3). Have Maria place the terms herself."
-      : "Factor x² + 5x + 6 by finding two numbers that multiply to 6 and add to 5 → (x+2)(x+3).";
+      ? [
+          { label: "Set up", detail: "Draw a 2×2 box for x² + 5x + 6." },
+          { label: "Fill factors", detail: "Find factors of 6 that sum to 5: 2 and 3." },
+          { label: "Write answer", detail: "Read off (x + 2)(x + 3). Have the student place terms." },
+        ]
+      : [
+          { label: "Identify", detail: "Find two numbers that multiply to 6 and add to 5." },
+          { label: "Factor", detail: "Those numbers are 2 and 3 → (x + 2)(x + 3)." },
+          { label: "Check", detail: "Expand briefly to confirm the original expression." },
+        ];
   }
   if (t.includes("sat") || t.includes("linear")) {
-    return "Solve 3x − 7 = 11: add 7 to both sides → 3x = 18 → x = 6. Check by substitution.";
+    return [
+      { label: "Isolate the variable term", detail: "Add 7 to both sides: 3x − 7 + 7 = 11 + 7 → 3x = 18." },
+      { label: "Solve for x", detail: "Divide both sides by 3 → x = 6." },
+      { label: "Verify", detail: "Substitute x = 6 back: 3(6) − 7 = 11 ✓" },
+    ];
   }
-  return `Walk one worked example for ${topic} together, then ask ${subject} student to try a near-transfer problem.`;
+  return [
+    { label: "Model", detail: `Walk through one ${topic} example together in ${subject}.` },
+    { label: "Coach", detail: "Have the student explain each step before writing." },
+    { label: "Transfer", detail: "Give a similar problem and let them try with hints." },
+  ];
 }
 
 export function buildExitProblem(subject: string, topic: string): string {
@@ -374,7 +448,8 @@ export async function createSession(input: {
     topic: input.topic.trim(),
     status: "prep",
     prepBrief,
-    startedAt: now,
+    startedAt: null,
+    timerStarted: false,
     exitProblem,
     createdAt: now,
     updatedAt: now,
@@ -395,6 +470,7 @@ export async function createSession(input: {
         status: session.status,
         prep_brief: session.prepBrief,
         started_at: session.startedAt,
+        timer_started: session.timerStarted ?? false,
         exit_problem: session.exitProblem,
       }),
     });
@@ -445,6 +521,8 @@ export async function updateSession(
       method: "PATCH",
       body: JSON.stringify({
         status: updated.status,
+        started_at: updated.startedAt,
+        timer_started: updated.timerStarted,
         ended_at: updated.endedAt,
         duration_minutes: updated.durationMinutes,
         session_type: updated.sessionType,
@@ -480,7 +558,7 @@ export async function listSessionsForTutor(tutorUsername: string): Promise<Tutor
   }
   return [...sessionFallback.values()]
     .filter((s) => s.tutorUsername === tutorUsername)
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    .sort((a, b) => (b.startedAt ?? b.createdAt).localeCompare(a.startedAt ?? a.createdAt));
 }
 
 export async function rememberAfterVerify(session: TutorOsSession): Promise<void> {

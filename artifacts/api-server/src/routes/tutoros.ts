@@ -97,13 +97,19 @@ router.get("/tutoros/sessions", async (req, res): Promise<void> => {
   try {
     const sessions = await listSessionsForTutor(username);
     const verified = sessions.filter((s) => s.learningMoment).length;
-    const awaiting = sessions.filter((s) => s.status === "awaiting_verify").length;
+    const awaiting = sessions.filter(
+      (s) => s.status === "awaiting_verify" && s.timerStarted,
+    ).length;
     res.json({
       sessions,
       stats: {
-        total: sessions.length,
+        total: sessions.filter((s) => s.timerStarted || s.status === "verified").length,
         learningMoments: verified,
-        unverified: sessions.filter((s) => s.status === "logged" || s.status === "awaiting_verify").length,
+        unverified: sessions.filter(
+          (s) =>
+            s.timerStarted &&
+            (s.status === "logged" || s.status === "awaiting_verify"),
+        ).length,
         awaitingVerify: awaiting,
       },
     });
@@ -140,9 +146,14 @@ router.post("/tutoros/sessions/:id/begin", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Session not found" });
       return;
     }
+    if (session.status !== "prep") {
+      res.status(400).json({ error: "Session timer has already started or session ended" });
+      return;
+    }
     const updated = await updateSession(session.id, {
       status: "active",
       startedAt: new Date().toISOString(),
+      timerStarted: true,
     });
     res.json(updated);
   } catch (error) {
@@ -181,12 +192,19 @@ router.post("/tutoros/sessions/:id/end", async (req, res): Promise<void> => {
       return;
     }
 
+    if (session.status !== "active" || !session.timerStarted) {
+      res.status(400).json({ error: "Session timer must be running before ending" });
+      return;
+    }
+
     const endedAt = new Date().toISOString();
     const computedDuration =
       durationMinutes ??
       Math.max(
         1,
-        Math.round((Date.parse(endedAt) - Date.parse(session.startedAt)) / 60000),
+        Math.round(
+          (Date.parse(endedAt) - Date.parse(session.startedAt ?? endedAt)) / 60000,
+        ),
       );
 
     const updated = await updateSession(session.id, {

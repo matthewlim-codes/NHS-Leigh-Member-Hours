@@ -2,12 +2,29 @@ export type SessionStatus = "prep" | "active" | "awaiting_verify" | "verified" |
 export type TutorRubric = "independent" | "with_hints" | "not_yet";
 export type SessionType = "hw_center" | "tutorial";
 
+export interface WorkedExampleStep {
+  label: string;
+  detail: string;
+}
+
 export interface PrepBrief {
   struggles: string[];
   recommendedApproach: string;
   workedExample: string;
   watchFors: string[];
   coachNote?: string;
+  /** Section heading for context block (first vs follow-up session) */
+  contextTitle?: string;
+  /** Bullet points: teacher notes (first) or last-session review (follow-up) */
+  contextBullets?: string[];
+  /** Bullet points for recommended teaching approach */
+  approachBullets?: string[];
+  /** Step-by-step worked example for the tutor to walk through */
+  workedExampleSteps?: WorkedExampleStep[];
+  /** Tips for common student misconceptions */
+  misconceptionTips?: string[];
+  /** Teacher-reported needs (first session; populated by teacher-notes integration) */
+  teacherNotes?: string[];
   memorySource: "everos" | "demo" | "empty" | "ai";
   isAdapted: boolean;
 }
@@ -21,7 +38,10 @@ export interface TutorOsSession {
   topic: string;
   status: SessionStatus;
   prepBrief: PrepBrief;
-  startedAt: string;
+  /** ISO timestamp when the tutoring timer started (null until tutor taps Start) */
+  startedAt?: string | null;
+  /** True once the tutor has started the live session timer */
+  timerStarted?: boolean;
   endedAt?: string | null;
   durationMinutes?: number | null;
   sessionType?: SessionType | null;

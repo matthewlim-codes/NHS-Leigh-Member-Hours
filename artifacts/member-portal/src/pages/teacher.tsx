@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, LogOut, Users } from "lucide-react";
 import {
@@ -8,6 +8,7 @@ import {
   listTutoringRequests,
   type TutoringRequest,
 } from "@/tutoros/lib/api";
+import { useAuthUser, logoutLocalTeacher } from "@/hooks/use-auth-user";
 
 const SUBJECTS = [
   "Algebra I",
@@ -34,9 +35,7 @@ const emptyForm = {
 export default function TeacherPortalPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: user } = useGetMe({
-    query: { queryKey: getGetMeQueryKey(), retry: false },
-  });
+  const { user } = useAuthUser();
   const logout = useLogout();
 
   const [requests, setRequests] = useState<TutoringRequest[]>([]);
@@ -91,6 +90,7 @@ export default function TeacherPortalPage() {
   };
 
   const onLogout = () => {
+    logoutLocalTeacher();
     logout.mutate(undefined, {
       onSettled: () => {
         queryClient.setQueryData(getGetMeQueryKey(), undefined);

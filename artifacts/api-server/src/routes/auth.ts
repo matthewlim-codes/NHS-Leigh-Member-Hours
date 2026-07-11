@@ -92,7 +92,7 @@ router.post("/auth/teacher-login", async (req, res): Promise<void> => {
     return;
   }
 
-  if (code !== TEACHER_ACCESS_CODE) {
+  if (code.toLowerCase() !== TEACHER_ACCESS_CODE) {
     res.status(401).json({ error: "Invalid teacher access code" });
     return;
   }

@@ -132,11 +132,16 @@ export async function generatePrepBrief(input: {
           "You are TutorOS Prep Agent — an expert peer-tutoring coach for high-school NHS tutors.",
           "Write practical, conversational coaching like ChatGPT/Claude would: specific, warm, actionable.",
           "Return ONLY valid JSON with keys:",
-          '- struggles: string[] (2-4 concrete prior stuck points)',
-          "- recommendedApproach: string (how to teach today, 2-4 sentences)",
-          "- workedExample: string (one fully worked example with step-by-step teaching notes)",
-          "- watchFors: string[] (2-4 live-session cues)",
-          "- coachNote: string (a natural paragraph the tutor can skim in ~30 seconds — coaching voice, not a bullet list)",
+          '- contextTitle: string (e.g. "What they need help with" for first session, "Last session review" for follow-up)',
+          "- contextBullets: string[] (3-5 bullets: teacher notes for first session, or last-session review for follow-up)",
+          "- approachBullets: string[] (3-4 bullets for recommended teaching approach today)",
+          '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps with math/work shown)',
+          "- misconceptionTips: string[] (2-4 common mistakes to watch for)",
+          '- struggles: string[] (legacy — same as key stuck points)',
+          "- recommendedApproach: string (legacy summary paragraph)",
+          "- workedExample: string (legacy one-line summary joining steps with →)",
+          "- watchFors: string[] (legacy — same as misconceptionTips)",
+          "- coachNote: string (optional 1-2 sentence skim summary)",
           "Do not wrap keys in markdown except optional ```json fences.",
           "No surveillance language. No audio/transcript assumptions. Tutor stays in control.",
         ].join("\n"),
@@ -173,20 +178,49 @@ export async function generatePrepBrief(input: {
 
     const struggles = asStringArray(parsed.struggles);
     const watchFors = asStringArray(parsed.watchFors);
+    const contextBullets = asStringArray(parsed.contextBullets);
+    const approachBullets = asStringArray(parsed.approachBullets);
+    const misconceptionTips = asStringArray(parsed.misconceptionTips);
+    const contextTitle =
+      typeof parsed.contextTitle === "string" ? parsed.contextTitle.trim() : "";
     const recommendedApproach =
       typeof parsed.recommendedApproach === "string" ? parsed.recommendedApproach.trim() : "";
     const workedExample =
       typeof parsed.workedExample === "string" ? parsed.workedExample.trim() : "";
     const coachNote = typeof parsed.coachNote === "string" ? parsed.coachNote.trim() : "";
 
+    const workedExampleSteps = Array.isArray(parsed.workedExampleSteps)
+      ? parsed.workedExampleSteps
+          .map((step) => {
+            if (!step || typeof step !== "object") return null;
+            const row = step as Record<string, unknown>;
+            const label = typeof row.label === "string" ? row.label.trim() : "";
+            const detail = typeof row.detail === "string" ? row.detail.trim() : "";
+            if (!detail) return null;
+            return { label: label || "Step", detail };
+          })
+          .filter((s): s is { label: string; detail: string } => Boolean(s))
+      : [];
+
+    const isAdapted = Boolean(memory && memory.episodes.length > 0) || everosNotes.length > 0;
+
     return {
       struggles: struggles.length ? struggles : template.struggles,
       recommendedApproach: recommendedApproach || template.recommendedApproach,
       workedExample: workedExample || template.workedExample,
       watchFors: watchFors.length ? watchFors : template.watchFors,
+      contextTitle: contextTitle || template.contextTitle,
+      contextBullets: contextBullets.length ? contextBullets : template.contextBullets,
+      approachBullets: approachBullets.length ? approachBullets : template.approachBullets,
+      workedExampleSteps: workedExampleSteps.length
+        ? workedExampleSteps
+        : template.workedExampleSteps,
+      misconceptionTips: misconceptionTips.length
+        ? misconceptionTips
+        : template.misconceptionTips,
       coachNote: coachNote || undefined,
       memorySource: "ai",
-      isAdapted: Boolean(memory && memory.episodes.length > 0) || everosNotes.length > 0,
+      isAdapted,
     };
   } catch {
     return template;

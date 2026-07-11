@@ -45,7 +45,7 @@ export default function TutorOsHistoryPage() {
             <li key={session.id}>
               <Link
                 href={
-                  session.status === "awaiting_verify"
+                  session.status === "awaiting_verify" && session.timerStarted
                     ? `/tutoros/verify/${session.id}`
                     : `/tutoros/session/${session.id}`
                 }

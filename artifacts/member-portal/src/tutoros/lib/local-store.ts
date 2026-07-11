@@ -101,6 +101,25 @@ function buildTemplateBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
+      contextTitle: "What they need help with",
+      contextBullets: [
+        `Teacher focus area: ${topic}`,
+        "Check in on confidence before diving into problems.",
+      ],
+      approachBullets: [
+        "Open with a quick warm-up question on a prerequisite skill.",
+        "Model one example out loud, narrating each step.",
+        "Hand off a similar problem and coach while they work.",
+      ],
+      workedExampleSteps: [
+        { label: "Model", detail: `Walk through one ${topic} example together in ${subject}.` },
+        { label: "Coach", detail: "Have the student explain each step before writing." },
+        { label: "Transfer", detail: "Give a similar problem and let them try with hints." },
+      ],
+      misconceptionTips: [
+        "Ask them to explain the first step before solving.",
+        "Stop and re-teach if they freeze for >20 seconds.",
+      ],
       coachNote: `You're meeting ${tuteeName} for ${subject} on ${topic}. Start with a quick confidence check, teach one clear example out loud, then hand them a similar problem while you coach. Keep the session interactive — have them narrate each step.`,
       memorySource: "empty",
       isAdapted: false,
@@ -116,6 +135,27 @@ function buildTemplateBrief(input: {
     workedExample:
       "Box method for x² + 5x + 6: fill the box with factors of 6 that sum to 5 → (x+2)(x+3). Have them place the terms.",
     watchFors: [
+      "Watch for the same mistake from last time.",
+      "Have them narrate each step out loud.",
+      "Avoid jumping straight to formulas — start with the box method.",
+    ],
+    contextTitle: "Last session review",
+    contextBullets: [
+      `Last time: ${episode.summary}`,
+      `Strategy that helped: ${preferred}`,
+      "What to adjust: slow down before independent practice.",
+    ],
+    approachBullets: [
+      `Start with ${preferred} — it worked before for ${tuteeName}.`,
+      "Ask what they remember from last session before re-teaching.",
+      "Give one guided example, then a near-transfer problem.",
+    ],
+    workedExampleSteps: [
+      { label: "Set up", detail: "Draw a 2×2 box for x² + 5x + 6." },
+      { label: "Fill factors", detail: "Find factors of 6 that sum to 5: 2 and 3." },
+      { label: "Write answer", detail: "Read off (x + 2)(x + 3). Have the student place terms." },
+    ],
+    misconceptionTips: [
       "Watch for the same mistake from last time.",
       "Have them narrate each step out loud.",
       "Avoid jumping straight to formulas — start with the box method.",
@@ -152,6 +192,16 @@ async function fetchAiPrepBrief(input: {
       recommendedApproach: String(data.recommendedApproach),
       workedExample: String(data.workedExample),
       watchFors: Array.isArray(data.watchFors) ? data.watchFors : [],
+      contextTitle: data.contextTitle ? String(data.contextTitle) : undefined,
+      contextBullets: Array.isArray(data.contextBullets) ? data.contextBullets : undefined,
+      approachBullets: Array.isArray(data.approachBullets) ? data.approachBullets : undefined,
+      workedExampleSteps: Array.isArray(data.workedExampleSteps)
+        ? data.workedExampleSteps
+        : undefined,
+      misconceptionTips: Array.isArray(data.misconceptionTips)
+        ? data.misconceptionTips
+        : undefined,
+      teacherNotes: Array.isArray(data.teacherNotes) ? data.teacherNotes : undefined,
       coachNote: data.coachNote ? String(data.coachNote) : undefined,
       memorySource: data.memorySource === "ai" ? "ai" : data.isAdapted ? "demo" : "empty",
       isAdapted: Boolean(data.isAdapted),
@@ -286,7 +336,8 @@ export const localTutorOs = {
       topic: input.topic.trim(),
       status: "prep",
       prepBrief,
-      startedAt: now,
+      startedAt: null,
+      timerStarted: false,
       exitProblem: buildExitProblem(input.subject, input.topic),
       createdAt: now,
       updatedAt: now,
@@ -299,12 +350,16 @@ export const localTutorOs = {
     return {
       sessions,
       stats: {
-        total: sessions.length,
+        total: sessions.filter((s) => s.timerStarted || s.status === "verified").length,
         learningMoments: sessions.filter((s) => s.learningMoment).length,
         unverified: sessions.filter(
-          (s) => s.status === "logged" || s.status === "awaiting_verify",
+          (s) =>
+            s.timerStarted &&
+            (s.status === "logged" || s.status === "awaiting_verify"),
         ).length,
-        awaitingVerify: sessions.filter((s) => s.status === "awaiting_verify").length,
+        awaitingVerify: sessions.filter(
+          (s) => s.status === "awaiting_verify" && s.timerStarted,
+        ).length,
       },
     };
   },
@@ -321,6 +376,7 @@ export const localTutorOs = {
       ...session,
       status: "active",
       startedAt: new Date().toISOString(),
+      timerStarted: true,
       updatedAt: new Date().toISOString(),
     });
   },
@@ -330,10 +386,18 @@ export const localTutorOs = {
     input: { tutorRubric: TutorRubric; sessionType: SessionType; durationMinutes?: number },
   ): TutorOsSession {
     const session = this.getSession(id);
+    if (session.status !== "active" || !session.timerStarted) {
+      throw new Error("Session timer must be running before ending");
+    }
     const endedAt = new Date().toISOString();
     const durationMinutes =
       input.durationMinutes ??
-      Math.max(1, Math.round((Date.parse(endedAt) - Date.parse(session.startedAt)) / 60000));
+      Math.max(
+        1,
+        Math.round(
+          (Date.parse(endedAt) - Date.parse(session.startedAt ?? endedAt)) / 60000,
+        ),
+      );
     return upsertSession({
       ...session,
       status: "awaiting_verify",

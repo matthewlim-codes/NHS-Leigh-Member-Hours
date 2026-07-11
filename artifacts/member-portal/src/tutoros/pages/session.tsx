@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { PrepBriefView } from "../components/prep-brief-view";
+import {
   PrimaryButton,
   SecondaryButton,
   TutorOsHeader,
@@ -25,6 +34,7 @@ export default function TutorOsSessionPage() {
   const [tick, setTick] = useState(0);
   const [rubric, setRubric] = useState<TutorRubric | null>(null);
   const [sessionType, setSessionType] = useState<SessionType>("hw_center");
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showRubric, setShowRubric] = useState(false);
 
   useEffect(() => {
@@ -32,7 +42,7 @@ export default function TutorOsSessionPage() {
     getSession(params.id)
       .then((data) => {
         setSession(data);
-        if (data.status === "awaiting_verify") {
+        if (data.status === "awaiting_verify" && data.timerStarted) {
           setLocation(`/tutoros/verify/${data.id}`);
         }
       })
@@ -41,13 +51,13 @@ export default function TutorOsSessionPage() {
   }, [params.id, setLocation]);
 
   useEffect(() => {
-    if (!session || session.status !== "active") return;
+    if (!session || session.status !== "active" || !session.startedAt) return;
     const timer = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => window.clearInterval(timer);
   }, [session]);
 
   const elapsed = useMemo(() => {
-    if (!session) return "0:00";
+    if (!session?.startedAt) return "0:00";
     const start = Date.parse(session.startedAt);
     const seconds = Math.max(0, Math.floor((Date.now() - start) / 1000));
     const mins = Math.floor(seconds / 60);
@@ -67,7 +77,7 @@ export default function TutorOsSessionPage() {
   };
 
   const onEnd = async () => {
-    if (!session || !rubric) return;
+    if (!session || !rubric || !session.startedAt) return;
     setEnding(true);
     setError(null);
     try {
@@ -114,37 +124,8 @@ export default function TutorOsSessionPage() {
         onBack={() => setLocation("/tutoros")}
       />
 
-      <div className="px-5 py-5 space-y-5">
-        <div className="rounded-2xl bg-[#0B1F4D] text-white p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-blue-200">
-            {session.subject}
-          </p>
-          <h2 className="mt-1 text-xl font-bold">
-            {session.tuteeName} · {session.topic}
-          </h2>
-          {brief.isAdapted ? (
-            <p className="mt-2 text-sm text-emerald-300">
-              {brief.memorySource === "ai" ? "AI prep · adapted from memory" : "Adapted from prior memory"}
-            </p>
-          ) : (
-            <p className="mt-2 text-sm text-blue-200">
-              {brief.memorySource === "ai" ? "AI prep · first session" : "First session — starter prep"}
-            </p>
-          )}
-        </div>
-
-        {brief.coachNote && (
-          <section className="rounded-2xl border border-[#1865F2]/25 bg-blue-50/50 p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1865F2]">
-              Coach note
-            </h3>
-            <p className="mt-2 text-[15px] leading-relaxed text-slate-800 whitespace-pre-wrap">
-              {brief.coachNote}
-            </p>
-          </section>
-        )}
-
-        {session.status === "active" && (
+      <div className="px-5 py-5 space-y-6">
+        {session.status === "active" && session.startedAt && (
           <div className="rounded-2xl border border-slate-200 px-4 py-5 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               Timer
@@ -154,10 +135,12 @@ export default function TutorOsSessionPage() {
           </div>
         )}
 
-        <BriefCard title="What they struggled with" items={brief.struggles} />
-        <BriefCard title="Recommended approach" items={[brief.recommendedApproach]} />
-        <BriefCard title="Worked example" items={[brief.workedExample]} />
-        <BriefCard title="Watch-fors" items={brief.watchFors} />
+        <PrepBriefView
+          brief={brief}
+          subject={session.subject}
+          topic={session.topic}
+          tuteeName={session.tuteeName}
+        />
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -170,7 +153,7 @@ export default function TutorOsSessionPage() {
         )}
 
         {session.status === "active" && !showRubric && (
-          <PrimaryButton onClick={() => setShowRubric(true)}>End session</PrimaryButton>
+          <PrimaryButton onClick={() => setShowEndConfirm(true)}>End session</PrimaryButton>
         )}
 
         {session.status === "active" && showRubric && (
@@ -236,23 +219,31 @@ export default function TutorOsSessionPage() {
           </PrimaryButton>
         )}
       </div>
-    </TutorOsShell>
-  );
-}
 
-function BriefCard({ title, items }: { title: string; items: string[] }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 p-4">
-      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[#1865F2]">
-        {title}
-      </h3>
-      <ul className="mt-2 space-y-2">
-        {items.map((item) => (
-          <li key={item} className="text-sm leading-relaxed text-slate-700">
-            {item}
-          </li>
-        ))}
-      </ul>
-    </section>
+      <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>End tutoring session?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to end this session with {session.tuteeName}? The timer will
+              stop and you&apos;ll complete a quick rubric before student verification.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <PrimaryButton
+              onClick={() => {
+                setShowEndConfirm(false);
+                setShowRubric(true);
+              }}
+            >
+              Yes, end session
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setShowEndConfirm(false)}>
+              Keep tutoring
+            </SecondaryButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </TutorOsShell>
   );
 }

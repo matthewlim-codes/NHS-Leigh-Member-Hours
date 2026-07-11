@@ -6,7 +6,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { PracticeDifficultyMode, PracticeProblem } from "../lib/api";
-import { DIFFICULTY_LABEL } from "../lib/practice-problems-templates";
+import {
+  DIFFICULTY_BADGE_CLASS,
+  DIFFICULTY_LABEL,
+  MODE_LABEL,
+} from "../lib/practice-problems-templates";
 import { SecondaryButton } from "./shell";
 
 const MODE_OPTIONS: Array<{ value: PracticeDifficultyMode; label: string }> = [
@@ -22,6 +26,7 @@ export function PracticeProblemsSection({
   onDifficultyModeChange,
   onGenerate,
   onChange,
+  lastGeneratedMode,
 }: {
   problems: PracticeProblem[];
   generating: boolean;
@@ -29,6 +34,7 @@ export function PracticeProblemsSection({
   onDifficultyModeChange: (mode: PracticeDifficultyMode) => void;
   onGenerate: () => void;
   onChange: (problems: PracticeProblem[]) => void;
+  lastGeneratedMode?: PracticeDifficultyMode | null;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [zoomedId, setZoomedId] = useState<string | null>(null);
@@ -69,7 +75,7 @@ export function PracticeProblemsSection({
           <h3 className="text-xl font-bold tracking-tight text-slate-900">Practice questions</h3>
           <p className="mt-1 text-sm text-slate-600">
             Generate fresh problems across five levels (basic → advanced). Choose easier, same, or
-            harder when regenerating.
+            harder when regenerating — both the badges and the question difficulty change.
           </p>
         </div>
       </div>
@@ -109,6 +115,18 @@ export function PracticeProblemsSection({
         </SecondaryButton>
       </div>
 
+      {lastGeneratedMode && problems.length > 0 && (
+        <p
+          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          data-testid="text-last-difficulty-mode"
+        >
+          Showing a <span className="font-semibold">{MODE_LABEL[lastGeneratedMode]}</span> set:{" "}
+          {problems
+            .map((p) => DIFFICULTY_LABEL[p.difficulty] ?? p.difficulty)
+            .join(" · ")}
+        </p>
+      )}
+
       {problems.length === 0 && !generating && (
         <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
           No practice questions yet. Tap generate to create three new problems with tutor steps and
@@ -119,6 +137,8 @@ export function PracticeProblemsSection({
       <ul className="space-y-4">
         {problems.map((problem, index) => {
           const isOpen = expanded[problem.id] ?? false;
+          const badgeClass =
+            DIFFICULTY_BADGE_CLASS[problem.difficulty] ?? "bg-[#1865F2]/10 text-[#1865F2]";
           return (
             <li
               key={problem.id}
@@ -126,7 +146,9 @@ export function PracticeProblemsSection({
             >
               <Collapsible open={isOpen} onOpenChange={() => toggleExpanded(problem.id)}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="rounded-full bg-[#1865F2]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#1865F2]">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${badgeClass}`}
+                  >
                     {DIFFICULTY_LABEL[problem.difficulty] ?? `Problem ${index + 1}`}
                   </span>
                   <div className="flex items-center gap-2">
@@ -187,34 +209,25 @@ export function PracticeProblemsSection({
                             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
                               {stepIndex + 1}
                             </span>
-                            <div className="min-w-0">
-                              {step.label && step.label !== "Step" && (
-                                <p className="text-sm font-semibold text-slate-800">{step.label}</p>
-                              )}
-                              <p className="text-sm leading-relaxed text-slate-600">{step.detail}</p>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{step.label}</p>
+                              <p className="text-sm text-slate-600">{step.detail}</p>
                             </div>
                           </li>
                         ))}
                       </ol>
                     )}
                   </div>
-
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Discussion stems
                     </p>
                     {problem.discussionStems.length === 0 ? (
-                      <p className="mt-2 text-sm text-slate-500">No discussion stems generated.</p>
+                      <p className="mt-2 text-sm text-slate-500">No discussion stems.</p>
                     ) : (
-                      <ul className="mt-2 space-y-1.5">
-                        {problem.discussionStems.map((stem) => (
-                          <li
-                            key={`${problem.id}-${stem}`}
-                            className="flex gap-2 text-sm leading-relaxed text-slate-700"
-                          >
-                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#1865F2]" />
-                            <span>{stem}</span>
-                          </li>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                        {problem.discussionStems.map((stem, stemIndex) => (
+                          <li key={`${problem.id}-stem-${stemIndex}`}>{stem}</li>
                         ))}
                       </ul>
                     )}
@@ -227,33 +240,25 @@ export function PracticeProblemsSection({
       </ul>
 
       {zoomed && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-white"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Practice problem zoom"
-          data-testid="practice-problem-zoom"
-        >
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                  DIFFICULTY_BADGE_CLASS[zoomed.difficulty] ?? "bg-[#1865F2]/10 text-[#1865F2]"
+                }`}
+              >
                 {DIFFICULTY_LABEL[zoomed.difficulty] ?? "Practice"}
-              </p>
-              <p className="mt-1 text-sm text-white/70">Full-screen problem view</p>
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomedId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setZoomedId(null)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
-              aria-label="Close zoom"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="flex flex-1 items-center justify-center px-6 py-10">
-            <p className="max-w-3xl text-center text-3xl font-bold leading-snug tracking-tight sm:text-4xl md:text-5xl">
-              {zoomed.prompt}
-            </p>
+            <p className="mt-4 text-lg leading-relaxed text-slate-900">{zoomed.prompt}</p>
           </div>
         </div>
       )}

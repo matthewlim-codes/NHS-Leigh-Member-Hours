@@ -1,3 +1,5 @@
+import { localTutorOs } from "./local-store";
+
 export type SessionStatus = "prep" | "active" | "awaiting_verify" | "verified" | "logged";
 export type TutorRubric = "independent" | "with_hints" | "not_yet";
 export type SessionType = "hw_center" | "tutorial";
@@ -76,6 +78,34 @@ export interface CommandResponse {
   }>;
 }
 
+type ApiMode = "unknown" | "server" | "local";
+
+let apiMode: ApiMode = "unknown";
+
+function isMissingRouteStatus(status: number) {
+  return status === 404 || status === 405;
+}
+
+async function detectServerSupport(): Promise<boolean> {
+  if (apiMode === "server") return true;
+  if (apiMode === "local") return false;
+
+  try {
+    const response = await fetch("/api/tutoros/meta", { credentials: "include" });
+    if (response.ok) {
+      apiMode = "server";
+      return true;
+    }
+    if (isMissingRouteStatus(response.status)) {
+      apiMode = "local";
+      return false;
+    }
+  } catch {
+    // fall through — try the real request path
+  }
+  return true;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: "include",
@@ -86,13 +116,53 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
 
+  if (isMissingRouteStatus(response.status)) {
+    apiMode = "local";
+    throw new RouteMissingError(response.status);
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(
-      typeof data?.error === "string" ? data.error : `Request failed (${response.status})`,
+      typeof (data as { error?: string })?.error === "string"
+        ? (data as { error: string }).error
+        : `Request failed (${response.status})`,
     );
   }
+  apiMode = "server";
   return data as T;
+}
+
+class RouteMissingError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`TutorOS API route missing (${status})`);
+    this.name = "RouteMissingError";
+    this.status = status;
+  }
+}
+
+async function withFallback<T>(serverCall: () => Promise<T>, localCall: () => T): Promise<T> {
+  const preferServer = await detectServerSupport();
+  if (!preferServer) {
+    return localCall();
+  }
+
+  try {
+    return await serverCall();
+  } catch (error) {
+    if (error instanceof RouteMissingError || apiMode === "local") {
+      return localCall();
+    }
+    // If the server literally doesn't have TutorOS yet, Express returns HTML 404
+    // and JSON parse yields {} — RouteMissingError covers that. Network failures
+    // also fall back so demos keep working.
+    if (error instanceof TypeError) {
+      apiMode = "local";
+      return localCall();
+    }
+    throw error;
+  }
 }
 
 export function startSession(input: {
@@ -100,41 +170,65 @@ export function startSession(input: {
   subject: string;
   topic: string;
 }) {
-  return api<TutorOsSession>("/tutoros/sessions/start", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return withFallback(
+    () =>
+      api<TutorOsSession>("/tutoros/sessions/start", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.startSession(input),
+  );
 }
 
 export function listMySessions() {
-  return api<SessionListResponse>("/tutoros/sessions");
+  return withFallback(
+    () => api<SessionListResponse>("/tutoros/sessions"),
+    () => localTutorOs.listMySessions(),
+  );
 }
 
 export function getSession(id: string) {
-  return api<TutorOsSession>(`/tutoros/sessions/${id}`);
+  return withFallback(
+    () => api<TutorOsSession>(`/tutoros/sessions/${id}`),
+    () => localTutorOs.getSession(id),
+  );
 }
 
 export function beginSession(id: string) {
-  return api<TutorOsSession>(`/tutoros/sessions/${id}/begin`, { method: "POST", body: "{}" });
+  return withFallback(
+    () => api<TutorOsSession>(`/tutoros/sessions/${id}/begin`, { method: "POST", body: "{}" }),
+    () => localTutorOs.beginSession(id),
+  );
 }
 
 export function endSession(
   id: string,
   input: { tutorRubric: TutorRubric; sessionType: SessionType; durationMinutes?: number },
 ) {
-  return api<TutorOsSession>(`/tutoros/sessions/${id}/end`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return withFallback(
+    () =>
+      api<TutorOsSession>(`/tutoros/sessions/${id}/end`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.endSession(id, input),
+  );
 }
 
 export function verifySession(id: string, input: { explanation: string; answer: string }) {
-  return api<TutorOsSession>(`/tutoros/sessions/${id}/verify`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return withFallback(
+    () =>
+      api<TutorOsSession>(`/tutoros/sessions/${id}/verify`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    () => localTutorOs.verifySession(id, input),
+  );
 }
 
 export function getCommandView() {
-  return api<CommandResponse>("/tutoros/command");
+  return withFallback(
+    () => api<CommandResponse>("/tutoros/command"),
+    () => localTutorOs.getCommandView(),
+  );
 }

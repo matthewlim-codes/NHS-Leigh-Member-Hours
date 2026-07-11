@@ -74,6 +74,7 @@ Butterbase app: `app_tsc2mvlq21yo` (`tutoros-leigh-nhs`).
 - The Google Sheets integration uses Replit's connector proxy (`@replit/connectors-sdk`). If it returns errors, the connection may need to be re-authorized via the integrations panel.
 - The spreadsheet ID and member data tabs are configured in `artifacts/api-server/src/lib/sheets.ts`. The current sheet reads the `11/12` and `10` tabs, finds columns by header across the first few header rows, and expects `STUDENT ID`, `NAME`, and `TOTAL HOURS` columns.
 - Hour goals are calculated in `artifacts/api-server/src/routes/dashboard.ts`: grade 10 requires 7 annual hours; grades 11/12 require 20 annual hours, split as 9 semester 1 hours and 11 semester 2 hours.
+- After deploying TutorOS API changes, republish/restart the **API Server** artifact (port 8080). A frontend-only publish leaves `/api/tutoros/*` returning Express `Cannot GET/POST` 404s. The member portal falls back to localStorage demo mode when those routes are missing.
 
 ## Pointers
 

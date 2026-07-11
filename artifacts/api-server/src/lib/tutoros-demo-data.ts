@@ -45,7 +45,7 @@ export const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
 /** Demo open requests teachers would post for tutors to claim. */
 export const DEMO_TUTORING_REQUESTS: DemoTutoringRequestSeed[] = [
   {
-    id: "template-math-im2-jordan",
+    id: "11111111-1111-4111-8111-111111111101",
     studentName: "Jordan Lee",
     grade: "10",
     assignedBy: "Ms. Patel · IM2 Period 2",
@@ -55,7 +55,7 @@ export const DEMO_TUTORING_REQUESTS: DemoTutoringRequestSeed[] = [
     createdAt: TEMPLATE_CREATED_AT,
   },
   {
-    id: "template-chem-honors-sam",
+    id: "11111111-1111-4111-8111-111111111102",
     studentName: "Sam Nguyen",
     grade: "11",
     assignedBy: "Mr. Ortiz · Chemistry Honors",
@@ -66,7 +66,7 @@ export const DEMO_TUTORING_REQUESTS: DemoTutoringRequestSeed[] = [
     createdAt: "2026-07-11T16:05:00.000Z",
   },
   {
-    id: "template-english-maya",
+    id: "11111111-1111-4111-8111-111111111103",
     studentName: "Maya Brooks",
     grade: "9",
     assignedBy: "Ms. Rivera · English 9",
@@ -101,35 +101,29 @@ export function buildJordanLeeMemory(): DemoTuteeMemorySeed {
 }
 
 export function buildDemoTuteeMemoryMap(): Record<string, DemoTuteeMemorySeed> {
-  const jordan = buildJordanLeeMemory();
-  const maria: DemoTuteeMemorySeed = {
-    tuteeSlug: "maria",
-    tuteeName: "Maria",
-    profile: {
-      grade: "10",
-      preferredApproach: "visual / box method",
-      struggles: ["sign errors when factoring", "jumps to FOIL without structure"],
-      skills: ["needs guidance on factoring quadratics"],
-      teacherNotes: ["Returning learner — continue from last factoring session."],
-      practicedPrompts: [
-        "Factor: x² + 5x + 6",
-        "Factor: x² + 7x + 12",
-        "Factor: x² − x − 20",
-      ],
-    },
-    episodes: [
-      {
-        topic: "factoring quadratics",
-        summary:
-          "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5. What changed: started trying the box method. Practiced: x²+5x+6, x²+7x+12, x²−x−20.",
-        outcome: "struggled",
-        approach: "formula-first",
-        when: "2026-07-10",
-        score: 2,
+  // First-session seeds only — no prior tutoring episodes for placeholder students.
+  const map: Record<string, DemoTuteeMemorySeed> = {};
+  for (const demo of DEMO_TUTORING_REQUESTS) {
+    map[slugifyTutee(demo.studentName)] = {
+      tuteeSlug: slugifyTutee(demo.studentName),
+      tuteeName: demo.studentName,
+      profile: {
+        grade: demo.grade,
+        assignedBy: demo.assignedBy,
+        teacherNotes: [`Assigned by ${demo.assignedBy} for ${demo.subject}`, demo.notes],
+        preferredApproach:
+          demo.studentName === "Jordan Lee"
+            ? "worked examples / step-by-step"
+            : demo.studentName === "Sam Nguyen"
+              ? "trend charts / compare-contrast"
+              : "sentence rewrite / examples",
+        struggles: [demo.notes],
+        skills: [],
       },
-    ],
-  };
-  return { [jordan.tuteeSlug]: jordan, maria: maria };
+      episodes: [],
+    };
+  }
+  return map;
 }
 
 export function teacherNotesFromMemory(

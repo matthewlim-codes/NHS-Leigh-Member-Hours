@@ -69,6 +69,8 @@ export interface PrepBrief {
   teacherNotes?: string[];
   /** AI-generated (or tutor-edited) practice problems for the session */
   practiceProblems?: PracticeProblem[];
+  /** Prompts already shown this session — regenerate must never reuse these */
+  avoidedPracticePrompts?: string[];
   /** Soft chips explaining how memory powered this brief */
   memoryBadges?: PrepMemoryBadge[];
   /** Short prior-episode summaries for the memory panel */

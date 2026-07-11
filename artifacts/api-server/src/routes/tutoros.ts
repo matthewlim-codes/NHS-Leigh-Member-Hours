@@ -243,6 +243,10 @@ router.post("/tutoros/sessions/:id/practice-problems/generate", async (req, res)
       ? req.body.avoidPrompts.map(String).map((s: string) => s.trim()).filter(Boolean)
       : [];
     const avoidFromSession = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
+    const avoidHistory = Array.isArray(session.prepBrief.avoidedPracticePrompts)
+      ? session.prepBrief.avoidedPracticePrompts.map(String)
+      : [];
+    const avoidPrompts = [...new Set([...avoidFromBody, ...avoidFromSession, ...avoidHistory])];
     const practiceProblems = await generatePracticeProblems({
       tuteeName: session.tuteeName,
       tuteeSlug: session.tuteeSlug,
@@ -250,13 +254,17 @@ router.post("/tutoros/sessions/:id/practice-problems/generate", async (req, res)
       topic: session.topic,
       prepBrief: session.prepBrief,
       difficultyMode,
-      avoidPrompts: [...new Set([...avoidFromBody, ...avoidFromSession])],
+      avoidPrompts,
     });
 
     const updated = await updateSession(session.id, {
       prepBrief: {
         ...session.prepBrief,
         practiceProblems,
+        avoidedPracticePrompts: [
+          ...avoidPrompts,
+          ...practiceProblems.map((p) => p.prompt),
+        ].slice(-80),
       },
     });
     res.json(updated);
@@ -665,7 +673,7 @@ router.post("/tutoros/materials", async (req, res): Promise<void> => {
     typeof req.body?.contentType === "string" ? req.body.contentType : undefined;
 
   if (!contentBase64 && !text?.trim()) {
-    res.status(400).json({ error: "Upload a file (PDF, DOC, TXT, etc.)" });
+    res.status(400).json({ error: "Upload a file (PDF, DOC, DOCX, TXT, PNG, JPEG, etc.)" });
     return;
   }
 

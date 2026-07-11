@@ -151,9 +151,7 @@ export default function TeacherPortalPage() {
       const contentBase64 = btoa(binary);
       const isText =
         file.type.startsWith("text/") ||
-        file.name.endsWith(".txt") ||
-        file.name.endsWith(".md") ||
-        file.name.endsWith(".csv");
+        /\.(txt|md|csv|tsv|html?|rtf|json|log)$/i.test(file.name);
       await uploadCourseMaterial({
         filename: file.name,
         subject: materialSubject,
@@ -222,8 +220,8 @@ export default function TeacherPortalPage() {
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Course materials</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Upload a worksheet (PDF, DOC, TXT, and more). Tutors see it in the session brief above
-              practice questions.
+              Upload a worksheet or image (PDF, DOC, DOCX, TXT, PNG, JPEG, and more). Tutors see it
+              in the session brief above practice questions.
             </p>
 
             <form onSubmit={onUploadMaterial} className="mt-4 space-y-3">
@@ -274,7 +272,7 @@ export default function TeacherPortalPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.txt,.md,.csv,.html,.pptx,.xlsx,application/pdf"
+                accept=".pdf,.doc,.docx,.txt,.md,.rtf,.csv,.tsv,.html,.htm,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.svg,application/pdf,image/*,text/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="hidden"
                 data-testid="input-material-file"
                 onChange={(e) => void onUploadFile(e.target.files?.[0] ?? null)}

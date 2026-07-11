@@ -99,7 +99,11 @@ export default function TutorOsSessionPage() {
     setGeneratingProblems(true);
     setError(null);
     try {
-      const avoidPrompts = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
+      const current = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
+      const history = Array.isArray(session.prepBrief.avoidedPracticePrompts)
+        ? session.prepBrief.avoidedPracticePrompts
+        : [];
+      const avoidPrompts = [...new Set([...current, ...history])];
       const updated = await generatePracticeProblems(session.id, {
         difficultyMode,
         avoidPrompts,

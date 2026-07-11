@@ -1,5 +1,6 @@
 import type { PrepBrief, PrepMemoryBadge } from "../lib/api";
 import { normalizePrepBrief } from "../lib/prep-brief-utils";
+import { filterNotesNotIn, uniqueNotes } from "../lib/note-utils";
 import { cn } from "@/lib/utils";
 
 const badgeTone: Record<PrepMemoryBadge["tone"], string> = {
@@ -24,6 +25,14 @@ export function PrepBriefView({
 }) {
   const normalized = normalizePrepBrief(brief, topic);
   const badges = brief.memoryBadges ?? [];
+  const teacherNotes = uniqueNotes(brief.teacherNotes ?? []);
+  const contextBullets = filterNotesNotIn(normalized.contextBullets, teacherNotes);
+  const contextTitle =
+    normalized.contextTitle === "What the teacher noted"
+      ? brief.isAdapted
+        ? "Pick up where you left off"
+        : "How to start"
+      : normalized.contextTitle;
 
   return (
     <article className="prep-brief-article space-y-8 pb-2">
@@ -77,9 +86,9 @@ export function PrepBriefView({
         </section>
       )}
 
-      {(brief.teacherNotes?.length ?? 0) > 0 && (
+      {teacherNotes.length > 0 && (
         <PrepSection title="From the teacher">
-          <BulletList items={brief.teacherNotes!} />
+          <BulletList items={teacherNotes} />
         </PrepSection>
       )}
 
@@ -89,9 +98,11 @@ export function PrepBriefView({
         </PrepSection>
       )}
 
-      <PrepSection title={normalized.contextTitle}>
-        <BulletList items={normalized.contextBullets} />
-      </PrepSection>
+      {contextBullets.length > 0 && (
+        <PrepSection title={contextTitle}>
+          <BulletList items={contextBullets} />
+        </PrepSection>
+      )}
 
       <PrepSection title={normalized.approachTitle}>
         <BulletList items={normalized.approachBullets} />

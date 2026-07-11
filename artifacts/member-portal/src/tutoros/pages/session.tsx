@@ -22,6 +22,7 @@ import {
   generatePracticeProblems,
   getSession,
   updatePracticeProblems,
+  type PracticeDifficultyMode,
   type PracticeProblem,
   type SessionType,
   type TutorOsSession,
@@ -29,6 +30,8 @@ import {
 } from "../lib/api";
 import { ScalePicker } from "../components/scale-picker";
 import { emptyTutorEvidence } from "../lib/evidence-types";
+
+type SessionPanel = "prep" | "live" | "rubric";
 
 export default function TutorOsSessionPage() {
   const params = useParams<{ id: string }>();
@@ -41,9 +44,10 @@ export default function TutorOsSessionPage() {
   const [rubric, setRubric] = useState<TutorRubric | null>(null);
   const [sessionType, setSessionType] = useState<SessionType>("hw_center");
   const [showEndConfirm, setShowEndConfirm] = useState(false);
-  const [showRubric, setShowRubric] = useState(false);
+  const [panel, setPanel] = useState<SessionPanel>("prep");
   const [generatingProblems, setGeneratingProblems] = useState(false);
   const [savingProblems, setSavingProblems] = useState(false);
+  const [difficultyMode, setDifficultyMode] = useState<PracticeDifficultyMode>("same");
   const [tutorEvidence, setTutorEvidence] = useState(emptyTutorEvidence());
   const saveProblemsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,7 +58,10 @@ export default function TutorOsSessionPage() {
         setSession(data);
         if (data.status === "awaiting_verify" && data.timerStarted) {
           setLocation(`/tutoros/verify/${data.id}`);
+          return;
         }
+        if (data.status === "active") setPanel("live");
+        else if (data.status === "prep") setPanel("prep");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -81,6 +88,7 @@ export default function TutorOsSessionPage() {
     try {
       const updated = await beginSession(session.id);
       setSession(updated);
+      setPanel("live");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not begin");
     }
@@ -91,7 +99,11 @@ export default function TutorOsSessionPage() {
     setGeneratingProblems(true);
     setError(null);
     try {
-      const updated = await generatePracticeProblems(session.id);
+      const avoidPrompts = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
+      const updated = await generatePracticeProblems(session.id, {
+        difficultyMode,
+        avoidPrompts,
+      });
       setSession(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate practice questions");
@@ -131,7 +143,6 @@ export default function TutorOsSessionPage() {
   const tutorEvidenceComplete =
     tutorEvidence.todaysGoal.trim().length > 0 &&
     tutorEvidence.biggestMisconception.trim().length > 0 &&
-    tutorEvidence.whatClicked.trim().length > 0 &&
     tutorEvidence.whatChangedToday.trim().length > 0;
 
   const onEnd = async () => {
@@ -143,6 +154,7 @@ export default function TutorOsSessionPage() {
         1,
         Math.round((Date.now() - Date.parse(session.startedAt)) / 60000),
       );
+      const changed = tutorEvidence.whatChangedToday.trim();
       const updated = await endSession(session.id, {
         tutorRubric: rubric,
         sessionType,
@@ -151,8 +163,8 @@ export default function TutorOsSessionPage() {
           ...tutorEvidence,
           todaysGoal: tutorEvidence.todaysGoal.trim(),
           biggestMisconception: tutorEvidence.biggestMisconception.trim(),
-          whatClicked: tutorEvidence.whatClicked.trim(),
-          whatChangedToday: tutorEvidence.whatChangedToday.trim(),
+          whatClicked: changed,
+          whatChangedToday: changed,
         },
       });
       setLocation(`/tutoros/verify/${updated.id}`);
@@ -161,6 +173,28 @@ export default function TutorOsSessionPage() {
     } finally {
       setEnding(false);
     }
+  };
+
+  const startHref = session
+    ? `/tutoros/start?tutee=${encodeURIComponent(session.tuteeName)}&subject=${encodeURIComponent(session.subject)}&topic=${encodeURIComponent(session.topic)}`
+    : "/tutoros/start";
+
+  const onHeaderBack = () => {
+    if (!session) {
+      setLocation("/tutoros");
+      return;
+    }
+    if (panel === "rubric") {
+      setPanel("live");
+      return;
+    }
+    if (panel === "live") {
+      setPanel("prep");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    // prep panel
+    setLocation(startHref);
   };
 
   if (loading) {
@@ -181,16 +215,24 @@ export default function TutorOsSessionPage() {
   }
 
   const brief = session.prepBrief;
+  const showRubric = panel === "rubric";
+  const showLiveChrome = panel === "live" && session.status === "active";
 
   return (
     <TutorOsShell>
       <TutorOsHeader
-        title={session.status === "prep" ? "Prep brief" : "Live session"}
-        onBack={() => setLocation("/tutoros")}
+        title={
+          showRubric
+            ? "Session wrap-up"
+            : panel === "live"
+              ? "Live session"
+              : "Prep brief"
+        }
+        onBack={onHeaderBack}
       />
 
       <div className="px-5 py-5 space-y-6">
-        {session.status === "active" && session.startedAt && (
+        {showLiveChrome && session.startedAt && (
           <div className="rounded-2xl border border-slate-200 px-4 py-5 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               Timer
@@ -200,22 +242,28 @@ export default function TutorOsSessionPage() {
           </div>
         )}
 
-        <PrepBriefView
-          brief={brief}
-          subject={session.subject}
-          topic={session.topic}
-          tuteeName={session.tuteeName}
-        />
+        {!showRubric && (
+          <>
+            <PrepBriefView
+              brief={brief}
+              subject={session.subject}
+              topic={session.topic}
+              tuteeName={session.tuteeName}
+            />
 
-        <PracticeProblemsSection
-          problems={brief.practiceProblems ?? []}
-          generating={generatingProblems}
-          onGenerate={onGeneratePracticeProblems}
-          onChange={onPracticeProblemsChange}
-        />
+            <PracticeProblemsSection
+              problems={brief.practiceProblems ?? []}
+              generating={generatingProblems}
+              difficultyMode={difficultyMode}
+              onDifficultyModeChange={setDifficultyMode}
+              onGenerate={onGeneratePracticeProblems}
+              onChange={onPracticeProblemsChange}
+            />
 
-        {savingProblems && (
-          <p className="text-xs text-slate-500">Saving practice question edits…</p>
+            {savingProblems && (
+              <p className="text-xs text-slate-500">Saving practice question edits…</p>
+            )}
+          </>
         )}
 
         {error && (
@@ -224,11 +272,15 @@ export default function TutorOsSessionPage() {
           </div>
         )}
 
-        {session.status === "prep" && (
+        {session.status === "prep" && panel === "prep" && (
           <PrimaryButton onClick={onBegin}>Start tutoring timer</PrimaryButton>
         )}
 
-        {session.status === "active" && !showRubric && (
+        {session.status === "active" && panel === "prep" && (
+          <PrimaryButton onClick={() => setPanel("live")}>Back to live session</PrimaryButton>
+        )}
+
+        {session.status === "active" && panel === "live" && (
           <PrimaryButton onClick={() => setShowEndConfirm(true)}>End session</PrimaryButton>
         )}
 
@@ -291,18 +343,6 @@ export default function TutorOsSessionPage() {
                 />
               </label>
 
-              <label className="block space-y-1.5">
-                <span className="text-sm font-semibold text-slate-800">What finally clicked?</span>
-                <input
-                  value={tutorEvidence.whatClicked}
-                  onChange={(e) =>
-                    setTutorEvidence((ev) => ({ ...ev, whatClicked: e.target.value }))
-                  }
-                  className="h-11 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
-                  placeholder="Box method made the pairs visual"
-                />
-              </label>
-
               <ScalePicker
                 label="Independence (1–5)"
                 value={tutorEvidence.independence}
@@ -321,7 +361,11 @@ export default function TutorOsSessionPage() {
                 <input
                   value={tutorEvidence.whatChangedToday}
                   onChange={(e) =>
-                    setTutorEvidence((ev) => ({ ...ev, whatChangedToday: e.target.value }))
+                    setTutorEvidence((ev) => ({
+                      ...ev,
+                      whatChangedToday: e.target.value,
+                      whatClicked: e.target.value,
+                    }))
                   }
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
                   placeholder="Jordan no longer needs hints for GCF"
@@ -355,7 +399,7 @@ export default function TutorOsSessionPage() {
             <PrimaryButton onClick={onEnd} disabled={!rubric || !tutorEvidenceComplete || ending}>
               {ending ? "Saving…" : "Hand phone to student → Verify"}
             </PrimaryButton>
-            <SecondaryButton onClick={() => setShowRubric(false)}>Back</SecondaryButton>
+            <SecondaryButton onClick={() => setPanel("live")}>Back</SecondaryButton>
           </div>
         )}
 
@@ -379,7 +423,7 @@ export default function TutorOsSessionPage() {
             <PrimaryButton
               onClick={() => {
                 setShowEndConfirm(false);
-                setShowRubric(true);
+                setPanel("rubric");
               }}
             >
               Yes, end session

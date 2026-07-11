@@ -149,10 +149,11 @@ function buildTemplateBrief(input: {
   const { tuteeName, subject, topic, memory } = input;
   const teacherNotes = teacherNotesFromMemory(memory);
   if (!memory || memory.episodes.length === 0) {
-    const contextBullets =
-      teacherNotes.length > 0
-        ? teacherNotes
-        : [`Teacher focus area: ${topic}`, "Check in on confidence before diving into problems."];
+    const contextBullets = [
+      `Focus today: ${topic}`,
+      "Check in on confidence before diving into problems.",
+      "Model one example, then hand off a near-transfer problem.",
+    ];
     return {
       struggles: Array.isArray(memory?.profile.struggles)
         ? memory.profile.struggles.map(String)
@@ -163,7 +164,7 @@ function buildTemplateBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
-      contextTitle: teacherNotes.length > 0 ? "What the teacher noted" : "What they need help with",
+      contextTitle: "How to start",
       contextBullets,
       approachBullets: [
         "Open with a quick warm-up question on a prerequisite skill.",
@@ -364,14 +365,28 @@ function rememberAfterVerify(session: TutorOsSession) {
     skills.unshift(session.tutorEvidence.whatChangedToday.slice(0, 80));
   }
 
+  const practicedPrompts = [
+    ...(Array.isArray(existing.profile.practicedPrompts)
+      ? existing.profile.practicedPrompts.map(String)
+      : []),
+    ...(session.prepBrief.practiceProblems ?? []).map((p) => p.prompt),
+  ]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .filter((p, i, arr) => arr.findIndex((x) => x.toLowerCase() === p.toLowerCase()) === i)
+    .slice(0, 40);
+
   map[session.tuteeSlug] = {
     ...existing,
     tuteeName: session.tuteeName,
     profile: {
       ...existing.profile,
+      practicedPrompts,
       preferredApproach:
         session.verifyScore != null && session.verifyScore >= 3
-          ? session.tutorEvidence?.whatClicked ?? "visual / box method"
+          ? session.tutorEvidence?.whatChangedToday?.slice(0, 80) ||
+            session.tutorEvidence?.whatClicked ||
+            "visual / box method"
           : existing.profile.preferredApproach ?? "visual / step-by-step",
       skills: skills.slice(0, 8),
     },
@@ -742,11 +757,23 @@ export const localTutorOs = {
     return { moments };
   },
 
-  generatePracticeProblems(sessionId: string): TutorOsSession {
+  generatePracticeProblems(
+    sessionId: string,
+    options?: { difficultyMode?: "easier" | "same" | "harder"; avoidPrompts?: string[] },
+  ): TutorOsSession {
     const session = this.getSession(sessionId);
+    const memory = readMemoryMap()[session.tuteeSlug] ?? null;
+    const memoryAvoid = Array.isArray(memory?.profile.practicedPrompts)
+      ? memory.profile.practicedPrompts.map(String)
+      : [];
+    const current = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
     const practiceProblems = templatePracticeProblems({
       subject: session.subject,
       topic: session.topic,
+      difficultyMode: options?.difficultyMode ?? "same",
+      avoidPrompts: [
+        ...new Set([...(options?.avoidPrompts ?? []), ...current, ...memoryAvoid]),
+      ],
     });
     return upsertSession({
       ...session,

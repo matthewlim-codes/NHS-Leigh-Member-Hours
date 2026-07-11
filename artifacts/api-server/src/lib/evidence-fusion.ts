@@ -131,19 +131,15 @@ export function parseTutorEvidence(raw: unknown): TutorEvidence | null {
   const todaysGoal = typeof value.todaysGoal === "string" ? value.todaysGoal.trim() : "";
   const biggestMisconception =
     typeof value.biggestMisconception === "string" ? value.biggestMisconception.trim() : "";
-  const whatClicked = typeof value.whatClicked === "string" ? value.whatClicked.trim() : "";
   const whatChangedToday =
     typeof value.whatChangedToday === "string" ? value.whatChangedToday.trim() : "";
+  const whatClickedRaw = typeof value.whatClicked === "string" ? value.whatClicked.trim() : "";
+  // Prefer explicit click note; otherwise reuse what changed (fields were redundant).
+  const whatClicked = whatClickedRaw || whatChangedToday;
   const independence =
     typeof value.independence === "number" ? clampScale(value.independence) : 0;
 
-  if (
-    !todaysGoal ||
-    !biggestMisconception ||
-    !whatClicked ||
-    !whatChangedToday ||
-    independence < 1
-  ) {
+  if (!todaysGoal || !biggestMisconception || !whatChangedToday || independence < 1) {
     return null;
   }
 

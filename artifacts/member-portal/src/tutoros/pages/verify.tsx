@@ -10,7 +10,6 @@ export default function TutorOsVerifyPage() {
   const [, setLocation] = useLocation();
   const [session, setSession] = useState<TutorOsSession | null>(null);
   const [studentEvidence, setStudentEvidence] = useState(emptyStudentEvidence());
-  const [answer, setAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<TutorOsSession | null>(null);
@@ -34,7 +33,7 @@ export default function TutorOsVerifyPage() {
     setError(null);
     try {
       const updated = await verifySession(session.id, {
-        answer,
+        answer: "",
         studentEvidence: {
           ...studentEvidence,
           stillConfusing: studentEvidence.stillConfusing.trim(),
@@ -100,7 +99,10 @@ export default function TutorOsVerifyPage() {
 
   return (
     <TutorOsShell showBottomNav={false}>
-      <TutorOsHeader title="Verify" onBack={() => setLocation(session ? `/tutoros/session/${session.id}` : "/tutoros")} />
+      <TutorOsHeader
+        title="Verify"
+        onBack={() => setLocation(session ? `/tutoros/session/${session.id}` : "/tutoros")}
+      />
       <form onSubmit={onSubmit} className="px-5 py-5 space-y-5">
         <div className="rounded-2xl bg-slate-50/80 px-4 py-4 shadow-sm shadow-slate-200/50">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
@@ -171,19 +173,6 @@ export default function TutorOsVerifyPage() {
           </label>
         </div>
 
-        <label className="block space-y-1.5">
-          <span className="text-sm font-semibold text-slate-800">
-            Try this: {session?.exitProblem ?? "One problem similar to today"}
-          </span>
-          <input
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            className="h-12 w-full rounded-xl border border-slate-200 px-4 text-base outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="Your answer"
-            required
-          />
-        </label>
-
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -192,7 +181,7 @@ export default function TutorOsVerifyPage() {
 
         <PrimaryButton
           type="submit"
-          disabled={submitting || !session || !studentEvidenceComplete || !answer.trim()}
+          disabled={submitting || !session || !studentEvidenceComplete}
         >
           {submitting ? "Scoring…" : "Submit check-in"}
         </PrimaryButton>

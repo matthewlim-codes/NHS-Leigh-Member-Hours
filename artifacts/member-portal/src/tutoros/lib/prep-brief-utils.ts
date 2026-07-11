@@ -64,21 +64,23 @@ function extractProblemStatement(workedExample: string, topic: string): string {
 
 export function normalizePrepBrief(brief: PrepBrief, topic: string): NormalizedPrepBrief {
   const contextTitle =
-    brief.contextTitle ??
-    (brief.isAdapted
-      ? "Last session review"
-      : brief.teacherNotes?.length || (brief.contextBullets?.length && brief.memorySource === "demo")
-        ? "What the teacher noted"
-        : "What they need help with");
+    brief.contextTitle && brief.contextTitle !== "What the teacher noted"
+      ? brief.contextTitle
+      : brief.isAdapted
+        ? "Pick up where you left off"
+        : "How to start";
 
+  // Never fall back to teacherNotes here — those render in "From the teacher" once.
   const contextBullets =
     brief.contextBullets?.length
       ? brief.contextBullets
       : brief.isAdapted
         ? [...brief.struggles, ...brief.watchFors.slice(0, 2)]
-        : [...(brief.teacherNotes ?? []), ...brief.struggles];
+        : brief.struggles.length > 0
+          ? brief.struggles
+          : [`Focus today: ${topic}`, "Check confidence, then one guided example."];
 
-  const approachTitle = brief.isAdapted ? "Recommended approach today" : "How to start";
+  const approachTitle = brief.isAdapted ? "Recommended approach today" : "How to teach it";
   const approachBullets =
     brief.approachBullets?.length
       ? brief.approachBullets

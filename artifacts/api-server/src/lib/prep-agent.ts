@@ -15,6 +15,7 @@ import {
   type PrepMemoryBadge,
   type TuteeMemory,
 } from "./tutoros-store";
+import { uniqueNotes } from "./note-utils";
 
 const APP_ID = process.env.BUTTERBASE_APP_ID ?? "app_tsc2mvlq21yo";
 const API_BASE = process.env.BUTTERBASE_API_URL ?? `https://api.butterbase.ai/v1/${APP_ID}`;
@@ -148,12 +149,12 @@ export async function generatePrepBrief(input: {
   teacherNotes?: string[];
 }): Promise<PrepBrief> {
   const memory = await getTuteeMemory(input.tuteeSlug);
-  const teacherNotes = [
+  const teacherNotes = uniqueNotes([
     ...(input.teacherNotes ?? []),
     ...((memory && Array.isArray(memory.profile.teacherNotes)
       ? memory.profile.teacherNotes.map(String)
       : []) as string[]),
-  ].filter(Boolean);
+  ]);
 
   let everosNotes: string[] = [];
   let everosEpisodes: Array<{ topic: string; summary: string }> = [];
@@ -216,8 +217,8 @@ export async function generatePrepBrief(input: {
           "Your job: make sure today's session starts exactly where the last one ended.",
           "Write practical, conversational coaching like ChatGPT/Claude: specific, warm, actionable.",
           "Return ONLY valid JSON with keys:",
-          '- contextTitle: string (e.g. "What they need help with" or "Pick up where you left off")',
-          "- contextBullets: string[] (3-5 bullets from last session / teacher notes)",
+          '- contextTitle: string (e.g. "How to start" for first session, "Pick up where you left off" for follow-up)',
+          "- contextBullets: string[] (3-5 bullets from LAST SESSION progress — do NOT repeat teacher assignment notes)",
           "- approachBullets: string[] (3-4 bullets for today's teaching approach)",
           '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps)',
           "- misconceptionTips: string[] (2-4)",
@@ -226,6 +227,7 @@ export async function generatePrepBrief(input: {
           "- workedExample: string",
           "- watchFors: string[]",
           "- coachNote: string (1-2 sentences: what changed last time + what to do first today)",
+          "Teacher notes are provided separately — do not copy them into contextBullets.",
           "No surveillance language. Tutor stays in control.",
         ].join("\n"),
       },

@@ -26,7 +26,17 @@ export interface WorkedExampleStep {
   detail: string;
 }
 
-export type PracticeProblemDifficulty = "warm-up" | "guided" | "independent";
+export type PracticeProblemDifficulty =
+  | "basic"
+  | "easy"
+  | "medium"
+  | "challenging"
+  | "advanced"
+  | "warm-up"
+  | "guided"
+  | "independent";
+
+export type PracticeDifficultyMode = "easier" | "same" | "harder";
 
 export interface PracticeProblem {
   id: string;
@@ -380,14 +390,27 @@ export function listLearningMoments() {
   );
 }
 
-export function generatePracticeProblems(sessionId: string) {
+export function generatePracticeProblems(
+  sessionId: string,
+  options?: {
+    difficultyMode?: PracticeDifficultyMode;
+    avoidPrompts?: string[];
+  },
+) {
   return withFallback(
     () =>
       api<TutorOsSession>(`/tutoros/sessions/${sessionId}/practice-problems/generate`, {
         method: "POST",
-        body: "{}",
+        body: JSON.stringify({
+          difficultyMode: options?.difficultyMode ?? "same",
+          avoidPrompts: options?.avoidPrompts ?? [],
+        }),
       }),
-    () => localTutorOs.generatePracticeProblems(sessionId),
+    () =>
+      localTutorOs.generatePracticeProblems(sessionId, {
+        difficultyMode: options?.difficultyMode ?? "same",
+        avoidPrompts: options?.avoidPrompts ?? [],
+      }),
   );
 }
 
@@ -399,5 +422,56 @@ export function updatePracticeProblems(sessionId: string, practiceProblems: Prac
         body: JSON.stringify({ practiceProblems }),
       }),
     () => localTutorOs.updatePracticeProblems(sessionId, practiceProblems),
+  );
+}
+
+export interface CourseMaterialUpload {
+  filename: string;
+  documentId?: string;
+  storageObjectId?: string;
+  status: "ingested" | "queued" | "local";
+  preview: string;
+}
+
+export function listCourseMaterials() {
+  return withFallback(
+    () => api<{ materials: CourseMaterialUpload[] }>("/tutoros/materials"),
+    async () => {
+      const raw = localStorage.getItem("tutoros-materials-v1");
+      if (!raw) return { materials: [] as CourseMaterialUpload[] };
+      try {
+        return { materials: JSON.parse(raw) as CourseMaterialUpload[] };
+      } catch {
+        return { materials: [] as CourseMaterialUpload[] };
+      }
+    },
+  );
+}
+
+export function uploadCourseMaterial(input: {
+  filename: string;
+  text?: string;
+  subject?: string;
+  topic?: string;
+  contentBase64?: string;
+  contentType?: string;
+}) {
+  return withFallback(
+    () =>
+      api<CourseMaterialUpload>("/tutoros/materials", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    async () => {
+      const material: CourseMaterialUpload = {
+        filename: input.filename,
+        status: "local",
+        preview: (input.text ?? input.filename).slice(0, 180),
+      };
+      const existing = await listCourseMaterials();
+      const materials = [material, ...existing.materials].slice(0, 20);
+      localStorage.setItem("tutoros-materials-v1", JSON.stringify(materials));
+      return material;
+    },
   );
 }

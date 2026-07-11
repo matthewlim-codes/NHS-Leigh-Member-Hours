@@ -3,7 +3,17 @@ import { getTuteeMemory, type PrepBrief, type TuteeMemory, type WorkedExampleSte
 const APP_ID = process.env.BUTTERBASE_APP_ID ?? "app_tsc2mvlq21yo";
 const API_BASE = process.env.BUTTERBASE_API_URL ?? `https://api.butterbase.ai/v1/${APP_ID}`;
 
-export type PracticeProblemDifficulty = "warm-up" | "guided" | "independent";
+export const PRACTICE_DIFFICULTIES = [
+  "basic",
+  "easy",
+  "medium",
+  "challenging",
+  "advanced",
+] as const;
+
+export type PracticeProblemDifficulty = (typeof PRACTICE_DIFFICULTIES)[number];
+
+export type PracticeDifficultyMode = "easier" | "same" | "harder";
 
 export interface PracticeProblem {
   id: string;
@@ -57,15 +67,39 @@ function parseSteps(value: unknown): WorkedExampleStep[] {
     .filter((s): s is WorkedExampleStep => Boolean(s));
 }
 
+function normalizeDifficulty(raw: string): PracticeProblemDifficulty {
+  const value = raw.trim().toLowerCase();
+  if (value === "warm-up" || value === "warmup") return "basic";
+  if (value === "guided") return "medium";
+  if (value === "independent") return "advanced";
+  if ((PRACTICE_DIFFICULTIES as readonly string[]).includes(value)) {
+    return value as PracticeProblemDifficulty;
+  }
+  return "medium";
+}
+
 function memorySummary(memory: TuteeMemory | null): string {
   if (!memory) return "No prior TutorOS memory.";
-  const notes = Array.isArray(memory.profile.teacherNotes)
-    ? memory.profile.teacherNotes.map(String).join("; ")
-    : "";
   const struggles = Array.isArray(memory.profile.struggles)
     ? memory.profile.struggles.map(String).join("; ")
     : "";
-  return [notes && `Teacher notes: ${notes}`, struggles && `Struggles: ${struggles}`]
+  const approach =
+    typeof memory.profile.preferredApproach === "string"
+      ? memory.profile.preferredApproach
+      : "";
+  const episodes = memory.episodes
+    .slice(0, 3)
+    .map((e, i) => `${i + 1}. [${e.topic}] ${e.headline ?? e.summary}`)
+    .join("\n");
+  const practiced = Array.isArray(memory.profile.practicedPrompts)
+    ? memory.profile.practicedPrompts.map(String).slice(0, 8).join(" | ")
+    : "";
+  return [
+    approach && `Preferred approach: ${approach}`,
+    struggles && `Struggles: ${struggles}`,
+    practiced && `Already practiced: ${practiced}`,
+    episodes && `Recent episodes:\n${episodes}`,
+  ]
     .filter(Boolean)
     .join("\n");
 }
@@ -79,195 +113,112 @@ function briefSummary(brief?: PrepBrief): string {
     .join("\n");
 }
 
+function difficultyBand(mode: PracticeDifficultyMode): PracticeProblemDifficulty[] {
+  if (mode === "easier") return ["basic", "easy", "medium"];
+  if (mode === "harder") return ["medium", "challenging", "advanced"];
+  return ["easy", "medium", "challenging"];
+}
+
+function promptKey(prompt: string): string {
+  return prompt.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function filterFreshProblems(
+  problems: PracticeProblem[],
+  avoidPrompts: string[],
+): PracticeProblem[] {
+  const avoid = new Set(avoidPrompts.map(promptKey).filter(Boolean));
+  return problems.filter((p) => !avoid.has(promptKey(p.prompt)));
+}
+
 function templateProblems(input: {
   subject: string;
   topic: string;
+  mode: PracticeDifficultyMode;
+  variant: number;
+  avoidPrompts?: string[];
 }): PracticeProblem[] {
   const topic = `${input.subject} ${input.topic}`.toLowerCase();
   const id = () => crypto.randomUUID();
+  const band = difficultyBand(input.mode);
+  const avoid = new Set((input.avoidPrompts ?? []).map(promptKey));
+
+  const factorSets = [
+    [
+      { d: band[0], prompt: "Factor: x² + 5x + 6", a: "(x + 2)(x + 3)", nums: "2 and 3" },
+      { d: band[1], prompt: "Factor: x² + 9x + 18", a: "(x + 3)(x + 6)", nums: "3 and 6" },
+      { d: band[2], prompt: "Factor: x² − 2x − 24", a: "(x − 6)(x + 4)", nums: "−6 and 4" },
+    ],
+    [
+      { d: band[0], prompt: "Factor: x² + 8x + 15", a: "(x + 3)(x + 5)", nums: "3 and 5" },
+      { d: band[1], prompt: "Factor: x² − 5x − 14", a: "(x − 7)(x + 2)", nums: "−7 and 2" },
+      { d: band[2], prompt: "Factor: x² + x − 30", a: "(x + 6)(x − 5)", nums: "6 and −5" },
+    ],
+    [
+      { d: band[0], prompt: "Factor: x² + 7x + 12", a: "(x + 3)(x + 4)", nums: "3 and 4" },
+      { d: band[1], prompt: "Factor: x² − 8x + 12", a: "(x − 6)(x − 2)", nums: "−6 and −2" },
+      { d: band[2], prompt: "Factor: x² − x − 20", a: "(x − 5)(x + 4)", nums: "−5 and 4" },
+    ],
+    [
+      { d: band[0], prompt: "Factor: x² + 6x + 8", a: "(x + 2)(x + 4)", nums: "2 and 4" },
+      { d: band[1], prompt: "Factor: x² − 3x − 10", a: "(x − 5)(x + 2)", nums: "−5 and 2" },
+      { d: band[2], prompt: "Factor: x² + 4x − 21", a: "(x + 7)(x − 3)", nums: "7 and −3" },
+    ],
+    [
+      { d: band[0], prompt: "Factor: x² + 11x + 24", a: "(x + 3)(x + 8)", nums: "3 and 8" },
+      { d: band[1], prompt: "Factor: x² − 7x + 10", a: "(x − 5)(x − 2)", nums: "−5 and −2" },
+      { d: band[2], prompt: "Factor: x² − 4x − 32", a: "(x − 8)(x + 4)", nums: "−8 and 4" },
+    ],
+    [
+      { d: band[0], prompt: "Factor: x² + 10x + 21", a: "(x + 3)(x + 7)", nums: "3 and 7" },
+      { d: band[1], prompt: "Factor: x² + 2x − 35", a: "(x + 7)(x − 5)", nums: "7 and −5" },
+      { d: band[2], prompt: "Factor: x² − 9x + 20", a: "(x − 4)(x − 5)", nums: "−4 and −5" },
+    ],
+  ];
 
   if (topic.includes("factor") || topic.includes("algebra") || topic.includes("im2")) {
-    return [
-      {
-        id: id(),
-        difficulty: "warm-up",
-        prompt: "Factor: x² + 5x + 6",
-        steps: [
-          { label: "Set up", detail: "Find two numbers that multiply to 6 and add to 5." },
-          { label: "Choose factors", detail: "Use 2 and 3." },
-          { label: "Write", detail: "Answer: (x + 2)(x + 3)." },
-        ],
-        discussionStems: [
-          "What two numbers multiply to the constant term?",
-          "Do those same numbers add to the middle coefficient?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "guided",
-        prompt: "Factor: x² + 7x + 12",
-        steps: [
-          { label: "Multiply & add", detail: "Need factors of 12 that sum to 7 → 3 and 4." },
-          { label: "Write binomials", detail: "(x + 3)(x + 4)." },
-          { label: "Check", detail: "Expand quickly to verify the middle term is 7x." },
-        ],
-        discussionStems: [
-          "Before you write anything, what pattern are we looking for?",
-          "How can you check your factors without fully expanding?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "independent",
-        prompt: "Factor: x² − x − 20",
-        steps: [
-          { label: "Signs", detail: "Product negative → one factor positive, one negative." },
-          { label: "Factors", detail: "Use −5 and 4 (multiply to −20, add to −1)." },
-          { label: "Answer", detail: "(x − 5)(x + 4)." },
-        ],
-        discussionStems: [
-          "What does the sign of the constant tell you about the factors?",
-          "Talk me through why your two numbers work.",
-        ],
-      },
-    ];
-  }
-
-  if (topic.includes("chemistry") || topic.includes("periodic")) {
-    return [
-      {
-        id: id(),
-        difficulty: "warm-up",
-        prompt: "Which is larger, atomic radius: sodium (Na) or chlorine (Cl)?",
-        steps: [
-          { label: "Trend", detail: "Atomic radius decreases across a period (left → right)." },
-          { label: "Compare", detail: "Na is left of Cl in period 3." },
-          { label: "Answer", detail: "Sodium has the larger atomic radius." },
-        ],
-        discussionStems: [
-          "Across a period, what happens to the pull on valence electrons?",
-          "Where would each atom sit on the periodic table?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "guided",
-        prompt: "Rank fluorine, bromine, and iodine by electronegativity (highest first).",
-        steps: [
-          { label: "Group trend", detail: "Electronegativity decreases down a group." },
-          { label: "Order", detail: "F > Br > I." },
-          { label: "Why", detail: "Outer electrons are farther from the nucleus down the group." },
-        ],
-        discussionStems: [
-          "Are these elements in the same group or period?",
-          "What happens to nuclear attraction as you move down a group?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "independent",
-        prompt: "Explain why ionization energy increases across period 3.",
-        steps: [
-          { label: "Definition", detail: "Energy to remove an outer electron." },
-          { label: "Nuclear charge", detail: "Proton count rises across the period." },
-          { label: "Shielding", detail: "Similar shielding → stronger pull on valence electrons." },
-        ],
-        discussionStems: [
-          "In your own words, what is ionization energy measuring?",
-          "What two competing effects matter across a period?",
-        ],
-      },
-    ];
-  }
-
-  if (topic.includes("english") || topic.includes("passive") || topic.includes("voice")) {
-    return [
-      {
-        id: id(),
-        difficulty: "warm-up",
-        prompt: 'Rewrite in active voice: "The essay was written by Maria."',
-        steps: [
-          { label: "Find actor", detail: "Maria is doing the action." },
-          { label: "Rebuild", detail: '"Maria wrote the essay."' },
-        ],
-        discussionStems: [
-          "Who is performing the action in this sentence?",
-          "How does the sentence change when the subject acts?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "guided",
-        prompt: 'Rewrite: "Mistakes were made during the lab."',
-        steps: [
-          { label: "Identify vagueness", detail: "Passive hides who made mistakes." },
-          { label: "Add actor", detail: 'If unknown: "We made mistakes during the lab."' },
-        ],
-        discussionStems: [
-          "What information does the passive version hide?",
-          "Can you name a reasonable subject for this sentence?",
-        ],
-      },
-      {
-        id: id(),
-        difficulty: "independent",
-        prompt: "Rewrite your last passive sentence from your essay in active voice.",
-        steps: [
-          { label: "Locate", detail: "Circle the be-verb + past participle." },
-          { label: "Actor first", detail: "Move the doer to the subject position." },
-          { label: "Trim", detail: "Remove unnecessary “by ___” phrases." },
-        ],
-        discussionStems: [
-          "Read your original sentence aloud — who is doing what?",
-          "Does the active version sound clearer to a reader?",
-        ],
-      },
-    ];
-  }
-
-  return [
-    {
+    let best = factorSets[input.variant % factorSets.length]!;
+    let bestOverlap = Infinity;
+    for (let i = 0; i < factorSets.length; i++) {
+      const set = factorSets[(input.variant + i) % factorSets.length]!;
+      const overlap = set.filter((item) => avoid.has(promptKey(item.prompt))).length;
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap;
+        best = set;
+        if (overlap === 0) break;
+      }
+    }
+    return best.map((item) => ({
       id: id(),
-      difficulty: "warm-up",
-      prompt: `Warm-up: explain one core idea for ${input.topic} in ${input.subject}.`,
+      difficulty: item.d!,
+      prompt: item.prompt,
       steps: [
-        { label: "Recall", detail: "Name the key vocabulary for today's topic." },
-        { label: "Model", detail: "Walk one simple example together." },
+        { label: "Set up", detail: `Find two numbers that multiply and add correctly → ${item.nums}.` },
+        { label: "Write", detail: `Answer: ${item.a}.` },
+        { label: "Check", detail: "Expand briefly to confirm the middle term." },
       ],
       discussionStems: [
-        "What do you already know about this topic?",
-        "Can you describe the first step in your own words?",
+        "What two numbers are you looking for?",
+        "How will you check without fully expanding?",
       ],
-    },
-    {
-      id: id(),
-      difficulty: "guided",
-      prompt: `Guided practice: apply ${input.topic} to a standard ${input.subject} problem.`,
-      steps: [
-        { label: "Plan", detail: "Identify what the problem is asking." },
-        { label: "Execute", detail: "Work the steps with tutor hints." },
-        { label: "Check", detail: "Verify the answer fits the question." },
-      ],
-      discussionStems: [
-        "What is this problem really asking you to find?",
-        "What would a partial attempt look like?",
-      ],
-    },
-    {
-      id: id(),
-      difficulty: "independent",
-      prompt: `Independent try: a near-transfer ${input.topic} problem in ${input.subject}.`,
-      steps: [
-        { label: "Set up", detail: "Student sets up without tutor writing." },
-        { label: "Coach", detail: "Tutor asks hint questions only." },
-        { label: "Reflect", detail: "Student summarizes the strategy used." },
-      ],
-      discussionStems: [
-        "What strategy from the last problem still applies?",
-        "Where did you get stuck, and what helped?",
-      ],
-    },
-  ];
+    }));
+  }
+
+  const nonce = (input.variant % 900) + 100;
+  return band.map((d, i) => ({
+    id: id(),
+    difficulty: d,
+    prompt: `Practice ${i + 1} (${d}) on ${input.topic} [#${nonce}]: write and solve one new problem that matches today's goal.`,
+    steps: [
+      { label: "Frame", detail: `Restate the ${input.topic} idea in one sentence.` },
+      { label: "Try", detail: "Attempt the problem out loud, one step at a time." },
+      { label: "Check", detail: "Explain why the answer makes sense." },
+    ],
+    discussionStems: [
+      "What is the first move you would make?",
+      "Where could a common mistake show up?",
+    ],
+  }));
 }
 
 async function chatCompletion(messages: Array<{ role: string; content: string }>): Promise<string | null> {
@@ -282,46 +233,36 @@ async function chatCompletion(messages: Array<{ role: string; content: string }>
     },
     body: JSON.stringify({
       model: practiceModel(),
-      temperature: 0.65,
-      max_tokens: 2200,
+      temperature: 0.85,
+      max_tokens: 1600,
       messages,
     }),
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Butterbase AI failed (${response.status}): ${text}`);
-  }
-
+  if (!response.ok) return null;
   const data = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   return data.choices?.[0]?.message?.content ?? null;
 }
 
-function parsePracticeProblems(raw: unknown): PracticeProblem[] {
-  if (!Array.isArray(raw)) return [];
-  const difficulties: PracticeProblemDifficulty[] = ["warm-up", "guided", "independent"];
+function parsePracticeProblems(value: unknown): PracticeProblem[] {
+  if (!Array.isArray(value)) return [];
   const results: PracticeProblem[] = [];
-
-  for (const [index, item] of raw.entries()) {
+  for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
     const prompt = typeof row.prompt === "string" ? row.prompt.trim() : "";
     if (!prompt) continue;
-    const difficultyRaw = typeof row.difficulty === "string" ? row.difficulty.trim() : "";
-    const difficulty = difficulties.includes(difficultyRaw as PracticeProblemDifficulty)
-      ? (difficultyRaw as PracticeProblemDifficulty)
-      : difficulties[Math.min(index, difficulties.length - 1)];
+    const difficultyRaw = typeof row.difficulty === "string" ? row.difficulty : "medium";
     results.push({
       id: crypto.randomUUID(),
       prompt,
       steps: parseSteps(row.steps),
       discussionStems: asStringArray(row.discussionStems),
-      difficulty,
+      difficulty: normalizeDifficulty(difficultyRaw),
     });
   }
-
   return results;
 }
 
@@ -331,32 +272,48 @@ export async function generatePracticeProblems(input: {
   subject: string;
   topic: string;
   prepBrief?: PrepBrief;
+  avoidPrompts?: string[];
+  difficultyMode?: PracticeDifficultyMode;
 }): Promise<PracticeProblem[]> {
   const memory = await getTuteeMemory(input.tuteeSlug);
-  const fallback = templateProblems({ subject: input.subject, topic: input.topic });
+  const mode = input.difficultyMode ?? "same";
+  const avoidPrompts = input.avoidPrompts ?? [];
+  const memoryAvoid = Array.isArray(memory?.profile.practicedPrompts)
+    ? memory.profile.practicedPrompts.map(String)
+    : [];
+  const avoidPromptsMerged = [...new Set([...avoidPrompts, ...memoryAvoid])];
+  const band = difficultyBand(mode);
+  const variant = Date.now() % 1000;
+  const fallback = templateProblems({
+    subject: input.subject,
+    topic: input.topic,
+    mode,
+    variant,
+    avoidPrompts: avoidPromptsMerged,
+  });
 
   try {
     const content = await chatCompletion([
       {
         role: "system",
         content: [
-          "You are TutorOS Practice Problem Generator — an expert high-school tutor coach.",
-          "Generate practice problems for ANY subject (math, science, English, SAT, etc.).",
+          "You are TutorOS Practice Problem Generator for high-school peer tutoring.",
+          "Generate NEW practice problems that are NOT duplicates of previous ones.",
           "Return ONLY valid JSON:",
           '{ "practiceProblems": [',
-          '  {',
+          "  {",
           '    "prompt": "student-facing problem text",',
-          '    "difficulty": "warm-up" | "guided" | "independent",',
+          '    "difficulty": "basic" | "easy" | "medium" | "challenging" | "advanced",',
           '    "steps": [{ "label": "short step name", "detail": "tutor-facing solution walkthrough" }],',
           '    "discussionStems": ["question tutor can ask", "..."]',
           "  }",
           "] }",
           "Rules:",
-          "- Exactly 3 problems: one warm-up, one guided, one independent (in that order).",
-          "- Prompts are what the tutor gives the student; steps/stems are tutor-only reference.",
-          "- Steps: 2-5 per problem with concrete math/work/text as appropriate to the subject.",
-          "- Discussion stems: 2-4 open questions that promote thinking, not yes/no.",
-          "- Match reading level to high school. No surveillance language.",
+          `- Exactly 3 problems with difficulties roughly: ${band.join(", ")} (in that order).`,
+          "- Prompts must be brand-new — never reuse avoided prompts or near-paraphrases.",
+          "- Use prior memory: if the student struggled, scaffold; if they improved, push transfer.",
+          "- Steps: 2-5 per problem. Discussion stems: 2-4 open questions.",
+          "- Match high-school level. No surveillance language.",
         ].join("\n"),
       },
       {
@@ -365,31 +322,61 @@ export async function generatePracticeProblems(input: {
           `Tutee: ${input.tuteeName}`,
           `Subject: ${input.subject}`,
           `Topic: ${input.topic}`,
+          `Difficulty mode: ${mode} (target band: ${band.join(" → ")})`,
+          `Freshness nonce: ${variant}`,
           memorySummary(memory),
           briefSummary(input.prepBrief),
+          avoidPromptsMerged.length
+            ? `DO NOT generate these (or close variants):\n${avoidPromptsMerged.map((p) => `- ${p}`).join("\n")}`
+            : "No prior prompts to avoid.",
           "",
-          "Generate fresh practice problems for this tutoring session.",
+          "Generate three fresh practice problems for this session.",
         ].join("\n"),
       },
     ]);
 
-    if (!content) return fallback;
+    if (!content) {
+      return filterFreshProblems(fallback, avoidPromptsMerged).length
+        ? filterFreshProblems(fallback, avoidPromptsMerged)
+        : fallback;
+    }
 
     const parsed = extractJsonObject(content);
-    const problems = parsePracticeProblems(parsed?.practiceProblems);
+    let problems = filterFreshProblems(
+      parsePracticeProblems(parsed?.practiceProblems),
+      avoidPromptsMerged,
+    );
+    if (problems.length < 3) {
+      const extras = filterFreshProblems(fallback, [
+        ...avoidPromptsMerged,
+        ...problems.map((p) => p.prompt),
+      ]);
+      problems = [...problems, ...extras].slice(0, 3);
+    }
     if (problems.length === 0) return fallback;
-    return problems;
+    return problems.slice(0, 3);
   } catch {
-    return fallback;
+    return filterFreshProblems(fallback, avoidPromptsMerged).length
+      ? filterFreshProblems(fallback, avoidPromptsMerged)
+      : fallback;
   }
 }
 
-export function normalizePracticeProblems(problems: PracticeProblem[]): PracticeProblem[] {
+export function normalizePracticeProblems(
+  problems: Array<{
+    id?: string;
+    prompt: string;
+    steps: WorkedExampleStep[];
+    discussionStems: string[];
+    difficulty: string;
+  }>,
+): PracticeProblem[] {
   return problems.map((p) => ({
     ...p,
     id: p.id || crypto.randomUUID(),
     prompt: p.prompt.trim(),
     steps: p.steps.map((s) => ({ label: s.label.trim() || "Step", detail: s.detail.trim() })),
     discussionStems: p.discussionStems.map((s) => s.trim()).filter(Boolean),
+    difficulty: normalizeDifficulty(String(p.difficulty)),
   }));
 }

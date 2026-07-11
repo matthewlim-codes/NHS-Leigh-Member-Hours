@@ -111,12 +111,17 @@ export function buildDemoTuteeMemoryMap(): Record<string, DemoTuteeMemorySeed> {
       struggles: ["sign errors when factoring", "jumps to FOIL without structure"],
       skills: ["needs guidance on factoring quadratics"],
       teacherNotes: ["Returning learner — continue from last factoring session."],
+      practicedPrompts: [
+        "Factor: x² + 5x + 6",
+        "Factor: x² + 7x + 12",
+        "Factor: x² − x − 20",
+      ],
     },
     episodes: [
       {
         topic: "factoring quadratics",
         summary:
-          "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5. What changed: started trying the box method.",
+          "Tried factoring x²+5x+6 with FOIL reverse only. Got stuck on signs. Score 2/5. What changed: started trying the box method. Practiced: x²+5x+6, x²+7x+12, x²−x−20.",
         outcome: "struggled",
         approach: "formula-first",
         when: "2026-07-10",

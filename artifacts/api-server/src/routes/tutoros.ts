@@ -30,6 +30,7 @@ import {
   normalizePracticeProblems,
 } from "../lib/practice-problems-agent";
 import { scoreVerificationWithAi } from "../lib/verify-agent";
+import { ingestTeacherMaterial, listLocalMaterials } from "../lib/materials-ingest";
 
 const router: IRouter = Router();
 
@@ -194,11 +195,7 @@ function parsePracticeProblemsBody(body: unknown): PracticeProblem[] | null {
         id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
         prompt: typeof row.prompt === "string" ? row.prompt : "",
         difficulty:
-          row.difficulty === "warm-up" ||
-          row.difficulty === "guided" ||
-          row.difficulty === "independent"
-            ? row.difficulty
-            : "guided",
+          typeof row.difficulty === "string" ? row.difficulty : "medium",
         steps: Array.isArray(row.steps)
           ? row.steps
               .map((step) => {
@@ -214,7 +211,13 @@ function parsePracticeProblemsBody(body: unknown): PracticeProblem[] | null {
           ? row.discussionStems.map(String).filter(Boolean)
           : [],
       };
-    }).filter(Boolean) as PracticeProblem[],
+    }).filter(Boolean) as Array<{
+      id: string;
+      prompt: string;
+      difficulty: string;
+      steps: Array<{ label: string; detail: string }>;
+      discussionStems: string[];
+    }>,
   );
   return normalized.filter((p) => p.prompt.trim());
 }
@@ -230,12 +233,24 @@ router.post("/tutoros/sessions/:id/practice-problems/generate", async (req, res)
       return;
     }
 
+    const difficultyModeRaw =
+      typeof req.body?.difficultyMode === "string" ? req.body.difficultyMode.trim() : "same";
+    const difficultyMode =
+      difficultyModeRaw === "easier" || difficultyModeRaw === "harder" || difficultyModeRaw === "same"
+        ? difficultyModeRaw
+        : "same";
+    const avoidFromBody = Array.isArray(req.body?.avoidPrompts)
+      ? req.body.avoidPrompts.map(String).map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    const avoidFromSession = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
     const practiceProblems = await generatePracticeProblems({
       tuteeName: session.tuteeName,
       tuteeSlug: session.tuteeSlug,
       subject: session.subject,
       topic: session.topic,
       prepBrief: session.prepBrief,
+      difficultyMode,
+      avoidPrompts: [...new Set([...avoidFromBody, ...avoidFromSession])],
     });
 
     const updated = await updateSession(session.id, {
@@ -381,10 +396,6 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
   const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
   const studentEvidence = parseStudentEvidence(req.body?.studentEvidence);
 
-  if (!answer) {
-    res.status(400).json({ error: "answer is required" });
-    return;
-  }
   if (!studentEvidence) {
     res.status(400).json({ error: "studentEvidence is required with confidence and what changed" });
     return;
@@ -619,6 +630,47 @@ router.get("/tutoros/learning-moments", async (req, res): Promise<void> => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to list learning moments",
+    });
+  }
+});
+
+router.get("/tutoros/materials", async (req, res): Promise<void> => {
+  const username = requireTeacher(req, res);
+  if (!username) return;
+  res.json({ materials: listLocalMaterials() });
+});
+
+router.post("/tutoros/materials", async (req, res): Promise<void> => {
+  const username = requireTeacher(req, res);
+  if (!username) return;
+
+  const filename = typeof req.body?.filename === "string" ? req.body.filename.trim() : "worksheet.txt";
+  const text = typeof req.body?.text === "string" ? req.body.text : undefined;
+  const subject = typeof req.body?.subject === "string" ? req.body.subject.trim() : undefined;
+  const topic = typeof req.body?.topic === "string" ? req.body.topic.trim() : undefined;
+  const contentBase64 =
+    typeof req.body?.contentBase64 === "string" ? req.body.contentBase64 : undefined;
+  const contentType =
+    typeof req.body?.contentType === "string" ? req.body.contentType : undefined;
+
+  if (!text?.trim() && !contentBase64) {
+    res.status(400).json({ error: "text or contentBase64 is required" });
+    return;
+  }
+
+  try {
+    const material = await ingestTeacherMaterial({
+      filename,
+      text,
+      subject,
+      topic,
+      contentBase64,
+      contentType,
+    });
+    res.status(201).json(material);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to upload material",
     });
   }
 });

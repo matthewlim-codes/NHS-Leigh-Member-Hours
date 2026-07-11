@@ -15,6 +15,7 @@ import {
   slugifyTutee,
   teacherNotesFromMemory,
 } from "./tutoros-demo-data";
+import { uniqueNotes } from "./note-utils";
 
 const APP_ID = process.env.BUTTERBASE_APP_ID ?? "app_tsc2mvlq21yo";
 const API_BASE = process.env.BUTTERBASE_API_URL ?? `https://api.butterbase.ai/v1/${APP_ID}`;
@@ -29,7 +30,15 @@ export interface WorkedExampleStep {
   detail: string;
 }
 
-export type PracticeProblemDifficulty = "warm-up" | "guided" | "independent";
+export type PracticeProblemDifficulty =
+  | "basic"
+  | "easy"
+  | "medium"
+  | "challenging"
+  | "advanced"
+  | "warm-up"
+  | "guided"
+  | "independent";
 
 export interface PracticeProblem {
   id: string;
@@ -286,15 +295,16 @@ export function buildPrepBrief(input: {
   teacherNotes?: string[];
 }): PrepBrief {
   const { tuteeName, subject, topic, memory } = input;
-  const teacherNotes = [
+  const teacherNotes = uniqueNotes([
     ...(input.teacherNotes ?? []),
     ...teacherNotesFromMemory(memory),
-  ].filter(Boolean);
+  ]);
   if (!memory || memory.episodes.length === 0) {
-    const contextBullets =
-      teacherNotes.length > 0
-        ? teacherNotes
-        : [`Teacher focus area: ${topic}`, "Check in on confidence before diving into problems."];
+    const contextBullets = [
+      `Focus today: ${topic}`,
+      "Check in on confidence before diving into problems.",
+      "Model one example, then hand off a near-transfer problem.",
+    ];
     return {
       struggles: Array.isArray(memory?.profile.struggles)
         ? memory.profile.struggles.map(String)
@@ -305,7 +315,7 @@ export function buildPrepBrief(input: {
         "Ask them to explain the first step before solving.",
         "Stop and re-teach if they freeze for >20 seconds.",
       ],
-      contextTitle: teacherNotes.length > 0 ? "What the teacher noted" : "What they need help with",
+      contextTitle: "How to start",
       contextBullets,
       approachBullets: [
         "Open with a quick warm-up question on a prerequisite skill.",
@@ -485,15 +495,15 @@ export async function createSession(input: {
 }): Promise<TutorOsSession> {
   const tuteeSlug = slugifyTutee(input.tuteeName);
 
-  let teacherNotes = input.teacherNotes ?? [];
+  let teacherNotes = uniqueNotes(input.teacherNotes ?? []);
   if (input.requestId) {
     const request = await getTutoringRequest(input.requestId);
     if (request) {
-      teacherNotes = [
+      teacherNotes = uniqueNotes([
         ...teacherNotes,
         `Assigned by ${request.assignedBy}`,
         request.notes?.trim() || "",
-      ].filter(Boolean);
+      ]);
     }
   }
 
@@ -740,14 +750,28 @@ export async function rememberAfterVerify(session: TutorOsSession): Promise<void
     newStruggles.push(session.tutorEvidence.biggestMisconception);
   }
 
+  const practicedPrompts = [
+    ...(Array.isArray(existing.profile.practicedPrompts)
+      ? existing.profile.practicedPrompts.map(String)
+      : []),
+    ...(session.prepBrief.practiceProblems ?? []).map((p) => p.prompt),
+  ]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .filter((p, i, arr) => arr.findIndex((x) => x.toLowerCase() === p.toLowerCase()) === i)
+    .slice(0, 40);
+
   const next: TuteeMemory = {
     ...existing,
     tuteeName: session.tuteeName,
     profile: {
       ...existing.profile,
+      practicedPrompts,
       preferredApproach:
         session.verifyScore != null && session.verifyScore >= 3
-          ? session.tutorEvidence?.whatClicked ?? "visual / box method"
+          ? session.tutorEvidence?.whatChangedToday?.slice(0, 80) ||
+            session.tutorEvidence?.whatClicked ||
+            "visual / box method"
           : existing.profile.preferredApproach ?? "visual / box method",
       skills: skills.slice(0, 8),
       struggles:

@@ -1,31 +1,37 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, Sparkles, X } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { PracticeProblem } from "../lib/api";
+import type { PracticeDifficultyMode, PracticeProblem } from "../lib/api";
+import { DIFFICULTY_LABEL } from "../lib/practice-problems-templates";
 import { SecondaryButton } from "./shell";
 
-const DIFFICULTY_LABEL: Record<PracticeProblem["difficulty"], string> = {
-  "warm-up": "Warm-up",
-  guided: "Guided",
-  independent: "Independent",
-};
+const MODE_OPTIONS: Array<{ value: PracticeDifficultyMode; label: string }> = [
+  { value: "easier", label: "Easier" },
+  { value: "same", label: "Same difficulty" },
+  { value: "harder", label: "Harder" },
+];
 
 export function PracticeProblemsSection({
   problems,
   generating,
+  difficultyMode,
+  onDifficultyModeChange,
   onGenerate,
   onChange,
 }: {
   problems: PracticeProblem[];
   generating: boolean;
+  difficultyMode: PracticeDifficultyMode;
+  onDifficultyModeChange: (mode: PracticeDifficultyMode) => void;
   onGenerate: () => void;
   onChange: (problems: PracticeProblem[]) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [zoomedId, setZoomedId] = useState<string | null>(null);
 
   useEffect(() => {
     setExpanded((prev) => {
@@ -37,6 +43,15 @@ export function PracticeProblemsSection({
     });
   }, [problems]);
 
+  useEffect(() => {
+    if (!zoomedId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setZoomedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomedId]);
+
   const updateProblem = (id: string, patch: Partial<PracticeProblem>) => {
     onChange(problems.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   };
@@ -45,35 +60,59 @@ export function PracticeProblemsSection({
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const zoomed = problems.find((p) => p.id === zoomedId) ?? null;
+
   return (
     <section className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-xl font-bold tracking-tight text-slate-900">Practice questions</h3>
           <p className="mt-1 text-sm text-slate-600">
-            Generate problems for any subject. Edit the question text; expand tutor hints when needed.
+            Generate fresh problems across five levels (basic → advanced). Choose easier, same, or
+            harder when regenerating.
           </p>
         </div>
       </div>
 
-      <SecondaryButton
-        type="button"
-        onClick={onGenerate}
-        disabled={generating}
-        className="inline-flex w-full items-center justify-center gap-2"
-      >
-        <Sparkles className="h-4 w-4" />
-        {generating
-          ? "Generating…"
-          : problems.length > 0
-            ? "Regenerate practice questions"
-            : "Generate practice questions"}
-      </SecondaryButton>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label className="block min-w-0 flex-1 space-y-1.5">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Regenerate difficulty
+          </span>
+          <select
+            value={difficultyMode}
+            onChange={(e) => onDifficultyModeChange(e.target.value as PracticeDifficultyMode)}
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none focus:border-[#1865F2] focus:ring-2 focus:ring-[#1865F2]/20"
+            data-testid="select-practice-difficulty-mode"
+          >
+            {MODE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <SecondaryButton
+          type="button"
+          onClick={onGenerate}
+          disabled={generating}
+          className="inline-flex w-full items-center justify-center gap-2 sm:mt-6 sm:w-auto sm:min-w-[220px]"
+          data-testid="button-generate-practice"
+        >
+          <Sparkles className="h-4 w-4" />
+          {generating
+            ? "Generating…"
+            : problems.length > 0
+              ? "Regenerate practice questions"
+              : "Generate practice questions"}
+        </SecondaryButton>
+      </div>
 
       {problems.length === 0 && !generating && (
         <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-          No practice questions yet. Tap generate to create a warm-up, guided, and independent problem
-          with tutor steps and discussion stems.
+          No practice questions yet. Tap generate to create three new problems with tutor steps and
+          discussion stems.
         </p>
       )}
 
@@ -90,24 +129,35 @@ export function PracticeProblemsSection({
                   <span className="rounded-full bg-[#1865F2]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#1865F2]">
                     {DIFFICULTY_LABEL[problem.difficulty] ?? `Problem ${index + 1}`}
                   </span>
-                  <CollapsibleTrigger asChild>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      onClick={() => setZoomedId(problem.id)}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                      data-testid={`button-zoom-practice-${index}`}
                     >
-                      {isOpen ? (
-                        <>
-                          Hide tutor hints
-                          <ChevronUp className="h-4 w-4" />
-                        </>
-                      ) : (
-                        <>
-                          Show steps &amp; discussion stems
-                          <ChevronDown className="h-4 w-4" />
-                        </>
-                      )}
+                      <Maximize2 className="h-4 w-4" />
+                      Zoom
                     </button>
-                  </CollapsibleTrigger>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                      >
+                        {isOpen ? (
+                          <>
+                            Hide tutor hints
+                            <ChevronUp className="h-4 w-4" />
+                          </>
+                        ) : (
+                          <>
+                            Show steps &amp; discussion stems
+                            <ChevronDown className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
+                    </CollapsibleTrigger>
+                  </div>
                 </div>
 
                 <label className="mt-3 block space-y-1.5">
@@ -175,6 +225,38 @@ export function PracticeProblemsSection({
           );
         })}
       </ul>
+
+      {zoomed && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-slate-950 text-white"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Practice problem zoom"
+          data-testid="practice-problem-zoom"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/60">
+                {DIFFICULTY_LABEL[zoomed.difficulty] ?? "Practice"}
+              </p>
+              <p className="mt-1 text-sm text-white/70">Full-screen problem view</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setZoomedId(null)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+              aria-label="Close zoom"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex flex-1 items-center justify-center px-6 py-10">
+            <p className="max-w-3xl text-center text-3xl font-bold leading-snug tracking-tight sm:text-4xl md:text-5xl">
+              {zoomed.prompt}
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

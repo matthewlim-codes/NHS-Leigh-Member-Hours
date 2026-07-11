@@ -7,7 +7,9 @@ import {
   completeTutoringRequest,
   createTutoringRequest,
   listTutoringRequests,
+  listLearningMoments,
   type TutoringRequest,
+  type LearningMoment,
 } from "@/tutoros/lib/api";
 import { useAuthUser, logoutLocalTeacher } from "@/hooks/use-auth-user";
 
@@ -41,6 +43,7 @@ export default function TeacherPortalPage() {
   const logout = useLogout();
 
   const [requests, setRequests] = useState<TutoringRequest[]>([]);
+  const [moments, setMoments] = useState<LearningMoment[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,6 +61,12 @@ export default function TeacherPortalPage() {
       setRequests(data.requests);
     } catch {
       setRequests([]);
+    }
+    try {
+      const data = await listLearningMoments();
+      setMoments(data.moments);
+    } catch {
+      setMoments([]);
     }
   };
 
@@ -302,7 +311,7 @@ export default function TeacherPortalPage() {
           </div>
 
           {requests.length === 0 ? (
-            <p className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+            <p className="mt-4 rounded-2xl bg-white px-4 py-8 text-center text-sm text-slate-500 shadow-sm shadow-slate-200/70">
               No requests yet. Assign a student to get tutors started.
             </p>
           ) : (
@@ -310,7 +319,7 @@ export default function TeacherPortalPage() {
               {requests.map((req) => (
                 <li
                   key={req.id}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+                  className="rounded-2xl bg-white px-4 py-4 shadow-sm shadow-slate-200/70"
                   data-testid={`request-card-${req.id}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -385,6 +394,58 @@ export default function TeacherPortalPage() {
                       </div>
                     </div>
                   )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="mt-10 mb-4" data-testid="teacher-results">
+          <h2 className="text-lg font-bold text-slate-900">Learning results</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Verified moments from TutorOS — what changed and what to practice next.
+          </p>
+          {moments.length === 0 ? (
+            <p className="mt-4 rounded-2xl bg-white px-4 py-6 text-center text-sm text-slate-500 shadow-sm shadow-slate-200/70">
+              No verified results yet. After tutors complete verify, scores appear here.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-3">
+              {moments.slice(0, 12).map((moment) => (
+                <li
+                  key={moment.id}
+                  className="rounded-2xl bg-white px-4 py-4 shadow-sm shadow-slate-200/70"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {moment.tuteeName} · {moment.topic}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {moment.subject}
+                        {moment.tutorUsername ? ` · tutor ${moment.tutorUsername}` : ""}
+                      </p>
+                      {moment.headline && (
+                        <p className="mt-2 text-sm text-[#1865F2]">{moment.headline}</p>
+                      )}
+                      {moment.summary && (
+                        <p className="mt-1 text-sm text-slate-600">{moment.summary}</p>
+                      )}
+                      {moment.practiceNext && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Practice next: {moment.practiceNext}
+                        </p>
+                      )}
+                      {moment.everosSaved && (
+                        <p className="mt-1 text-[11px] font-medium text-emerald-700">
+                          Saved to EverOS memory
+                        </p>
+                      )}
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                      {moment.score ?? "—"}/5
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>

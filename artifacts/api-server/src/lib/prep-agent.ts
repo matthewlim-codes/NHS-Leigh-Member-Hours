@@ -7,10 +7,12 @@ import {
   type EverOSProfile,
   isEverOSConfigured,
 } from "./everos-client";
+import { queryCourseMaterials } from "./verify-agent";
 import {
   buildPrepBrief as buildTemplateBrief,
   getTuteeMemory,
   type PrepBrief,
+  type PrepMemoryBadge,
   type TuteeMemory,
 } from "./tutoros-store";
 
@@ -59,6 +61,56 @@ function memoryContext(memory: TuteeMemory | null): string {
   ].join("\n");
 }
 
+function formatEverOSProfile(profile: EverOSProfile): string {
+  const explicit = profile.profile_data?.explicit_info
+    ? JSON.stringify(profile.profile_data.explicit_info)
+    : "";
+  const implicit = profile.profile_data?.implicit_traits
+    ? JSON.stringify(profile.profile_data.implicit_traits)
+    : "";
+  const scenario = profile.scenario ?? "";
+  return [scenario, explicit && `explicit: ${explicit}`, implicit && `traits: ${implicit}`]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function buildBadges(input: {
+  usedAi: boolean;
+  everosCount: number;
+  episodeCount: number;
+  hasMaterials: boolean;
+  hasTeacherNotes: boolean;
+}): PrepMemoryBadge[] {
+  const badges: PrepMemoryBadge[] = [];
+  if (input.usedAi) badges.push({ id: "ai", label: "AI prep", tone: "blue" });
+  if (input.everosCount > 0) {
+    badges.push({
+      id: "everos",
+      label: `EverOS · ${input.everosCount} recall`,
+      tone: "emerald",
+    });
+  }
+  if (input.episodeCount > 0) {
+    badges.push({
+      id: "episodes",
+      label:
+        input.episodeCount === 1
+          ? "1 prior session"
+          : `${input.episodeCount} prior sessions`,
+      tone: "slate",
+    });
+  } else {
+    badges.push({ id: "new", label: "New learner", tone: "amber" });
+  }
+  if (input.hasTeacherNotes) {
+    badges.push({ id: "teacher", label: "Teacher notes", tone: "violet" });
+  }
+  if (input.hasMaterials) {
+    badges.push({ id: "materials", label: "Course materials", tone: "sky" });
+  }
+  return badges;
+}
+
 async function chatCompletion(messages: Array<{ role: string; content: string }>): Promise<string | null> {
   const apiKey = getApiKey();
   if (!apiKey) return null;
@@ -72,7 +124,7 @@ async function chatCompletion(messages: Array<{ role: string; content: string }>
     body: JSON.stringify({
       model: process.env.TUTOROS_AI_MODEL || "anthropic/claude-sonnet-4",
       temperature: 0.7,
-      max_tokens: 1200,
+      max_tokens: 1400,
       messages,
     }),
   });
@@ -93,36 +145,67 @@ export async function generatePrepBrief(input: {
   subject: string;
   topic: string;
   tuteeSlug: string;
+  teacherNotes?: string[];
 }): Promise<PrepBrief> {
   const memory = await getTuteeMemory(input.tuteeSlug);
+  const teacherNotes = [
+    ...(input.teacherNotes ?? []),
+    ...((memory && Array.isArray(memory.profile.teacherNotes)
+      ? memory.profile.teacherNotes.map(String)
+      : []) as string[]),
+  ].filter(Boolean);
 
   let everosNotes: string[] = [];
+  let everosEpisodes: Array<{ topic: string; summary: string }> = [];
   if (isEverOSConfigured()) {
     try {
       const result = await searchMemories({
         userId: tuteeUserId(input.tuteeSlug),
-        query: `${input.topic} tutoring struggled succeeded approach`,
-        method: "hybrid",
+        query: `${input.subject} ${input.topic} tutoring struggled succeeded approach what changed`,
+        method: memory && memory.episodes.length > 0 ? "hybrid" : "hybrid",
         memoryTypes: ["episodic_memory", "profile"],
-        topK: 5,
+        topK: 6,
       });
       const episodes = result.data?.episodes ?? [];
       const profiles = result.data?.profiles ?? [];
+      everosEpisodes = episodes
+        .map((e: EverOSEpisode) => ({
+          topic: e.subject ?? input.topic,
+          summary: (e.summary ?? e.episode ?? "").trim(),
+        }))
+        .filter((e) => e.summary);
       everosNotes = [
-        ...episodes.map((e: EverOSEpisode) => e.summary ?? e.episode ?? "").filter(Boolean),
-        ...profiles.map((p: EverOSProfile) => p.scenario ?? "").filter(Boolean),
-      ].slice(0, 5);
+        ...everosEpisodes.map((e) => e.summary),
+        ...profiles.map((p: EverOSProfile) => formatEverOSProfile(p)).filter(Boolean),
+      ].slice(0, 6);
     } catch {
       // ignore EverOS enrichment failures
     }
   }
+
+  const materials = await queryCourseMaterials(`${input.subject} ${input.topic}`);
 
   const template = buildTemplateBrief({
     tuteeName: input.tuteeName,
     subject: input.subject,
     topic: input.topic,
     memory,
+    teacherNotes,
   });
+
+  const localEpisodes = (memory?.episodes ?? []).slice(0, 3).map((e) => ({
+    topic: e.topic,
+    summary: e.headline ?? e.summary,
+  }));
+  const memoryEpisodes =
+    everosEpisodes.length > 0
+      ? everosEpisodes.slice(0, 3)
+      : localEpisodes;
+
+  const episodeCount = Math.max(
+    memory?.episodes.length ?? 0,
+    everosEpisodes.length,
+  );
 
   try {
     const content = await chatCompletion([
@@ -130,20 +213,20 @@ export async function generatePrepBrief(input: {
         role: "system",
         content: [
           "You are TutorOS Prep Agent — an expert peer-tutoring coach for high-school NHS tutors.",
-          "Write practical, conversational coaching like ChatGPT/Claude would: specific, warm, actionable.",
+          "Your job: make sure today's session starts exactly where the last one ended.",
+          "Write practical, conversational coaching like ChatGPT/Claude: specific, warm, actionable.",
           "Return ONLY valid JSON with keys:",
-          '- contextTitle: string (e.g. "What they need help with" for first session, "Last session review" for follow-up)',
-          "- contextBullets: string[] (3-5 bullets: teacher notes for first session, or last-session review for follow-up)",
-          "- approachBullets: string[] (3-4 bullets for recommended teaching approach today)",
-          '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps with math/work shown)',
-          "- misconceptionTips: string[] (2-4 common mistakes to watch for)",
-          '- struggles: string[] (legacy — same as key stuck points)',
-          "- recommendedApproach: string (legacy summary paragraph)",
-          "- workedExample: string (legacy one-line summary joining steps with →)",
-          "- watchFors: string[] (legacy — same as misconceptionTips)",
-          "- coachNote: string (optional 1-2 sentence skim summary)",
-          "Do not wrap keys in markdown except optional ```json fences.",
-          "No surveillance language. No audio/transcript assumptions. Tutor stays in control.",
+          '- contextTitle: string (e.g. "What they need help with" or "Pick up where you left off")',
+          "- contextBullets: string[] (3-5 bullets from last session / teacher notes)",
+          "- approachBullets: string[] (3-4 bullets for today's teaching approach)",
+          '- workedExampleSteps: array of { "label": string, "detail": string } (3-5 steps)',
+          "- misconceptionTips: string[] (2-4)",
+          "- struggles: string[]",
+          "- recommendedApproach: string",
+          "- workedExample: string",
+          "- watchFors: string[]",
+          "- coachNote: string (1-2 sentences: what changed last time + what to do first today)",
+          "No surveillance language. Tutor stays in control.",
         ].join("\n"),
       },
       {
@@ -155,15 +238,38 @@ export async function generatePrepBrief(input: {
           "",
           "TutorOS memory:",
           memoryContext(memory),
-          everosNotes.length ? `\nEverOS notes:\n${everosNotes.map((n) => `- ${n}`).join("\n")}` : "",
+          teacherNotes.length
+            ? `\nTeacher notes:\n${teacherNotes.map((n) => `- ${n}`).join("\n")}`
+            : "",
+          everosNotes.length
+            ? `\nEverOS long-term memory:\n${everosNotes.map((n) => `- ${n}`).join("\n")}`
+            : "",
+          materials.length
+            ? `\nCourse materials (RAG):\n${materials.map((n) => `- ${n.slice(0, 280)}`).join("\n")}`
+            : "",
           "",
-          "Create a 2-minute pre-session instruction plan for the tutor.",
-        ].join("\n"),
+          "Create a 2-minute pre-session instruction plan that continues from prior learning.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
     ]);
 
     if (!content) {
-      return { ...template, memorySource: memory ? "demo" : "empty" };
+      return {
+        ...template,
+        teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
+        materialsCited: materials.slice(0, 2),
+        memoryEpisodes,
+        memoryBadges: buildBadges({
+          usedAi: false,
+          everosCount: everosNotes.length,
+          episodeCount,
+          hasMaterials: materials.length > 0,
+          hasTeacherNotes: teacherNotes.length > 0,
+        }),
+        memorySource: everosNotes.length ? "everos" : memory ? "demo" : "empty",
+      };
     }
 
     const parsed = extractJsonObject(content);
@@ -171,8 +277,18 @@ export async function generatePrepBrief(input: {
       return {
         ...template,
         coachNote: content.trim(),
-        memorySource: "ai",
-        isAdapted: Boolean(memory && memory.episodes.length > 0),
+        teacherNotes: teacherNotes.length ? teacherNotes : undefined,
+        materialsCited: materials.slice(0, 2),
+        memoryEpisodes,
+        memoryBadges: buildBadges({
+          usedAi: true,
+          everosCount: everosNotes.length,
+          episodeCount,
+          hasMaterials: materials.length > 0,
+          hasTeacherNotes: teacherNotes.length > 0,
+        }),
+        memorySource: everosNotes.length ? "everos" : "ai",
+        isAdapted: episodeCount > 0,
       };
     }
 
@@ -202,7 +318,7 @@ export async function generatePrepBrief(input: {
           .filter((s): s is { label: string; detail: string } => Boolean(s))
       : [];
 
-    const isAdapted = Boolean(memory && memory.episodes.length > 0) || everosNotes.length > 0;
+    const isAdapted = episodeCount > 0;
 
     return {
       struggles: struggles.length ? struggles : template.struggles,
@@ -218,14 +334,37 @@ export async function generatePrepBrief(input: {
       misconceptionTips: misconceptionTips.length
         ? misconceptionTips
         : template.misconceptionTips,
+      teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
+      materialsCited: materials.slice(0, 2),
+      memoryEpisodes,
+      memoryBadges: buildBadges({
+        usedAi: true,
+        everosCount: everosNotes.length,
+        episodeCount,
+        hasMaterials: materials.length > 0,
+        hasTeacherNotes: teacherNotes.length > 0,
+      }),
       coachNote: coachNote || undefined,
-      memorySource: "ai",
+      memorySource: everosNotes.length ? "everos" : "ai",
       isAdapted,
     };
   } catch {
-    return template;
+    return {
+      ...template,
+      teacherNotes: teacherNotes.length ? teacherNotes : template.teacherNotes,
+      materialsCited: materials.slice(0, 2),
+      memoryEpisodes,
+      memoryBadges: buildBadges({
+        usedAi: false,
+        everosCount: everosNotes.length,
+        episodeCount,
+        hasMaterials: materials.length > 0,
+        hasTeacherNotes: teacherNotes.length > 0,
+      }),
+      memorySource: everosNotes.length ? "everos" : memory ? "demo" : "empty",
+      isAdapted: episodeCount > 0,
+    };
   }
 }
 
-// Keep EverOS helpers imported for memory write path reuse elsewhere
 export { addMemories, flushMemories };

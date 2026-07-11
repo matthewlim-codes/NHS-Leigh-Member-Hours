@@ -49,6 +49,15 @@ export default function TutorOsHomePage() {
     }
   };
 
+  const startMariaDemo = () => {
+    const params = new URLSearchParams({
+      tutee: "Maria",
+      subject: "Algebra II / IM2",
+      topic: "factoring",
+    });
+    setLocation(`/tutoros/start?${params.toString()}`);
+  };
+
   return (
     <TutorOsShell>
       <div className="px-5 pt-5">
@@ -57,23 +66,25 @@ export default function TutorOsHomePage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1865F2]">
               Leigh NHS Tutors
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">TutorOS</h1>
-            <p className="mt-1 text-sm text-slate-500">Memory for peer tutoring</p>
+            <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-900">
+              TutorOS
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">Start every session where the last one ended</p>
           </div>
-          <div className="rounded-2xl bg-blue-50 px-3 py-2 text-center">
+          <div className="rounded-2xl bg-white px-3 py-2 text-center shadow-sm shadow-slate-200/80">
             <p className="text-2xl font-bold text-[#1865F2] leading-none">
               {stats?.learningMoments ?? 0}
             </p>
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-[#1865F2]">
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Moments
             </p>
           </div>
         </div>
 
-        <div className="relative mx-auto mt-8 mb-6 flex h-40 w-40 items-center justify-center">
-          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-sky-100 via-emerald-50 to-amber-50" />
-          <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-3xl bg-[#1865F2] text-white shadow-lg">
-            <Sparkles className="h-10 w-10" />
+        <div className="relative mx-auto mt-8 mb-6 flex h-36 w-36 items-center justify-center">
+          <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-sky-50 via-white to-emerald-50 shadow-sm shadow-slate-200/70" />
+          <div className="relative z-10 flex h-20 w-20 items-center justify-center rounded-3xl bg-[#1865F2] text-white shadow-md shadow-blue-200/80">
+            <Sparkles className="h-9 w-9" />
           </div>
         </div>
 
@@ -81,32 +92,39 @@ export default function TutorOsHomePage() {
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
             Ready to start tutoring?
           </h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-slate-600">
-            Prep from memory, verify learning in 30 seconds, and give officers proof that tutoring
-            worked — without listening in.
+          <p className="mt-3 text-[15px] leading-relaxed text-slate-500">
+            AI prep from memory, verify learning in ~30 seconds, and save what changed for next time.
           </p>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-8 space-y-3">
           <Link href="/tutoros/start">
-            <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#1865F2] px-6 py-3.5 text-base font-semibold text-white shadow-sm">
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#1865F2] px-6 py-3.5 text-base font-semibold text-white shadow-md shadow-blue-200/70">
               <PlayCircle className="h-5 w-5" />
               Start Session
             </span>
           </Link>
+          <button
+            type="button"
+            onClick={startMariaDemo}
+            className="inline-flex w-full items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm shadow-slate-200/80"
+            data-testid="button-maria-demo"
+          >
+            Demo: Maria with memory
+          </button>
         </div>
 
         {openRequests.length > 0 && (
           <section className="mt-8" data-testid="open-requests">
             <h3 className="text-lg font-bold text-slate-900">Open teacher requests</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Claim a student assigned by a teacher — we&apos;ll prefill your session.
+              Claim a student — we&apos;ll prefill and pull teacher notes into prep.
             </p>
             <ul className="mt-3 space-y-2">
               {openRequests.map((request) => (
                 <li
                   key={request.id}
-                  className="rounded-2xl border border-slate-200 px-4 py-3"
+                  className="rounded-2xl bg-white px-4 py-3 shadow-sm shadow-slate-200/70"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -124,8 +142,7 @@ export default function TutorOsHomePage() {
                       type="button"
                       onClick={() => void onClaim(request)}
                       disabled={claimingId === request.id}
-                      className="shrink-0 rounded-full bg-[#1865F2] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                      data-testid={`button-claim-${request.id}`}
+                      className="shrink-0 rounded-full bg-[#1865F2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-blue-200/70 disabled:opacity-60"
                     >
                       {claimingId === request.id ? "..." : "Claim"}
                     </button>
@@ -151,7 +168,7 @@ export default function TutorOsHomePage() {
           </div>
           {recent.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              No sessions yet. Try the demo: Jordan Lee · Algebra II / IM2 · factoring.
+              No sessions yet. Try Maria · Algebra II / IM2 · factoring.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
@@ -159,11 +176,11 @@ export default function TutorOsHomePage() {
                 <li key={session.id}>
                   <Link
                     href={
-                      session.status === "awaiting_verify" && session.timerStarted
+                      session.status === "awaiting_verify"
                         ? `/tutoros/verify/${session.id}`
                         : `/tutoros/session/${session.id}`
                     }
-                    className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 hover:bg-slate-50"
+                    className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm shadow-slate-200/70"
                   >
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-[#1865F2]">
                       {session.learningMoment ? (
@@ -198,9 +215,9 @@ export default function TutorOsHomePage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 px-3 py-3 text-center">
+    <div className="rounded-2xl bg-white px-3 py-3 text-center shadow-sm shadow-slate-200/70">
       <p className="text-xl font-bold text-slate-900">{value}</p>
-      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <p className="text-[11px] font-medium text-slate-400">{label}</p>
     </div>
   );
 }

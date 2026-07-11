@@ -118,7 +118,7 @@ export function PrimaryButton({
     <button
       type="button"
       className={cn(
-        "inline-flex w-full items-center justify-center rounded-full bg-[#1865F2] px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-[#1557d0] disabled:opacity-60",
+        "inline-flex w-full items-center justify-center rounded-full bg-[#1865F2] px-6 py-3.5 text-base font-semibold text-white shadow-md shadow-blue-200/70 transition hover:bg-[#1557d0] disabled:opacity-60",
         className,
       )}
       {...props}
@@ -137,7 +137,7 @@ export function SecondaryButton({
     <button
       type="button"
       className={cn(
-        "inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3.5 text-base font-semibold text-slate-800 transition hover:bg-slate-50 disabled:opacity-60",
+        "inline-flex w-full items-center justify-center rounded-full bg-white px-6 py-3.5 text-base font-semibold text-slate-800 shadow-sm shadow-slate-200/80 transition hover:bg-slate-50 disabled:opacity-60",
         className,
       )}
       {...props}

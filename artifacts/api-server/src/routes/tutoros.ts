@@ -13,13 +13,14 @@ import {
   listSessionsForTutor,
   purgeSessionsForTutor,
   rememberAfterVerify,
-  scoreVerification,
   updateSession,
   getButterbaseAppId,
   createTutoringRequest,
   listTutoringRequests,
   claimTutoringRequest,
   completeTutoringRequest,
+  recordLearningMoment,
+  listLearningMoments,
   type PracticeProblem,
   type SessionType,
   type TutorRubric,
@@ -28,6 +29,7 @@ import {
   generatePracticeProblems,
   normalizePracticeProblems,
 } from "../lib/practice-problems-agent";
+import { scoreVerificationWithAi } from "../lib/verify-agent";
 
 const router: IRouter = Router();
 
@@ -71,6 +73,10 @@ router.get("/tutoros/meta", (_req, res): void => {
     everosConfigured: isEverOSConfigured(),
     butterbaseConfigured: Boolean(process.env.BUTTERBASE_API_KEY),
     prepAgent: "llm",
+    verifyAgent: "llm",
+    exitProblemAgent: "llm",
+    ragCollection: "course-materials",
+    realtime: ["tutoring_requests", "learning_moments", "sessions"],
   });
 });
 
@@ -103,6 +109,10 @@ router.post("/tutoros/sessions/start", async (req, res): Promise<void> => {
   const tuteeName = typeof req.body?.tuteeName === "string" ? req.body.tuteeName.trim() : "";
   const subject = typeof req.body?.subject === "string" ? req.body.subject.trim() : "";
   const topic = typeof req.body?.topic === "string" ? req.body.topic.trim() : "";
+  const requestId = typeof req.body?.requestId === "string" ? req.body.requestId.trim() : undefined;
+  const teacherNotes = Array.isArray(req.body?.teacherNotes)
+    ? req.body.teacherNotes.map(String).map((s: string) => s.trim()).filter(Boolean)
+    : undefined;
 
   if (!tuteeName || !subject || !topic) {
     res.status(400).json({ error: "tuteeName, subject, and topic are required" });
@@ -115,6 +125,8 @@ router.post("/tutoros/sessions/start", async (req, res): Promise<void> => {
       tuteeName,
       subject,
       topic,
+      requestId,
+      teacherNotes,
     });
     res.status(201).json(session);
   } catch (error) {
@@ -395,11 +407,14 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
       return;
     }
 
-    const scored = scoreVerification({
+    const scored = await scoreVerificationWithAi({
+      subject: session.subject,
+      topic: session.topic,
       explanation,
       answer,
-      topic: session.topic,
       tutorRubric: session.tutorRubric,
+      exitProblem: session.exitProblem,
+      studentWhatChanged: studentEvidence.whatChangedToday,
     });
 
     const updated = await updateSession(session.id, {
@@ -409,7 +424,12 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
       verifyScore: scored.score,
       verifyMismatch: scored.mismatch,
       learningMoment: scored.learningMoment,
-      memoryNotes: { notes: scored.notes },
+      memoryNotes: {
+        notes: scored.notes,
+        practiceNext: scored.practiceNext,
+        aiSummary: scored.aiSummary,
+        verifySource: scored.source,
+      },
       studentEvidence,
       fusedHeadline: fuseEvidence({
         subject: session.subject,
@@ -425,6 +445,7 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
     if (updated) {
       await rememberAfterVerify(updated);
 
+      let everosSaved = false;
       if (isEverOSConfigured()) {
         try {
           const reflectionParts = [
@@ -432,6 +453,7 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
               `Tutor: ${session.tutorEvidence.whatChangedToday}`,
             studentEvidence.whatChangedToday &&
               `Student: ${studentEvidence.whatChangedToday}`,
+            scored.aiSummary && `AI verify: ${scored.aiSummary}`,
             session.teacherEvidence?.whatChangedToday &&
               `Teacher: ${session.teacherEvidence.whatChangedToday}`,
           ].filter(Boolean);
@@ -449,13 +471,32 @@ router.post("/tutoros/sessions/:id/verify", async (req, res): Promise<void> => {
             durationMinutes: updated.durationMinutes ?? undefined,
             location: updated.sessionType ?? undefined,
           });
+          everosSaved = true;
         } catch {
-          // demo memory already updated
+          // Butterbase memory already updated
         }
       }
+
+      await recordLearningMoment({
+        session: updated,
+        practiceNext: scored.practiceNext,
+        aiSummary: scored.aiSummary,
+        everosSaved,
+      });
     }
 
-    res.json(updated);
+    res.json(
+      updated
+        ? {
+            ...updated,
+            prepBrief: {
+              ...updated.prepBrief,
+              practiceNext: scored.practiceNext,
+              aiSummary: scored.aiSummary,
+            },
+          }
+        : updated,
+    );
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to verify session",
@@ -564,6 +605,20 @@ router.post("/tutoros/requests/:id/complete", async (req, res): Promise<void> =>
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Failed to complete request",
+    });
+  }
+});
+
+router.get("/tutoros/learning-moments", async (req, res): Promise<void> => {
+  const username = requireAuth(req, res);
+  if (!username) return;
+
+  try {
+    const moments = await listLearningMoments(50);
+    res.json({ moments });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list learning moments",
     });
   }
 });

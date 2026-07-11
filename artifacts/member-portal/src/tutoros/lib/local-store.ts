@@ -9,6 +9,7 @@ import type {
   TutorRubric,
   TutoringRequest,
   TutoringRequestStatus,
+  LearningMoment,
 } from "./api";
 import { fuseEvidence, studentExplanationFromEvidence } from "./evidence-fusion";
 import {
@@ -435,23 +436,57 @@ export const localTutorOs = {
     tuteeName: string;
     subject: string;
     topic: string;
+    requestId?: string;
+    teacherNotes?: string[];
   }): Promise<TutorOsSession> {
     const tuteeSlug = slugify(input.tuteeName);
     const memory = readMemoryMap()[tuteeSlug] ?? null;
+    const requestNotes =
+      input.requestId
+        ? (() => {
+            const req = readRequests().find((r) => r.id === input.requestId);
+            if (!req) return [];
+            return [`Assigned by ${req.assignedBy}`, req.notes?.trim() || ""].filter(Boolean);
+          })()
+        : [];
+    const teacherNotes = [...(input.teacherNotes ?? []), ...requestNotes].filter(Boolean);
     const aiBrief = await fetchAiPrepBrief({
       tuteeName: input.tuteeName,
       subject: input.subject,
       topic: input.topic,
       memory,
     });
-    const prepBrief =
-      aiBrief ??
-      buildTemplateBrief({
-        tuteeName: input.tuteeName,
-        subject: input.subject,
-        topic: input.topic,
-        memory,
-      });
+    const template = buildTemplateBrief({
+      tuteeName: input.tuteeName,
+      subject: input.subject,
+      topic: input.topic,
+      memory,
+    });
+    const episodeCount = memory?.episodes.length ?? 0;
+    const prepBrief = {
+      ...(aiBrief ?? template),
+      teacherNotes: teacherNotes.length ? teacherNotes : (aiBrief ?? template).teacherNotes,
+      memoryEpisodes: (memory?.episodes ?? []).slice(0, 3).map((e) => ({
+        topic: e.topic,
+        summary: e.headline ?? e.summary,
+      })),
+      memoryBadges: [
+        { id: "ai", label: aiBrief ? "AI prep" : "Template prep", tone: "blue" as const },
+        ...(episodeCount > 0
+          ? [
+              {
+                id: "episodes",
+                label: episodeCount === 1 ? "1 prior session" : `${episodeCount} prior sessions`,
+                tone: "slate" as const,
+              },
+            ]
+          : [{ id: "new", label: "New learner", tone: "amber" as const }]),
+        ...(teacherNotes.length
+          ? [{ id: "teacher", label: "Teacher notes", tone: "violet" as const }]
+          : []),
+      ],
+      isAdapted: episodeCount > 0,
+    };
     const now = new Date().toISOString();
     const session: TutorOsSession = {
       id: crypto.randomUUID(),
@@ -677,6 +712,34 @@ export const localTutorOs = {
     };
     writeRequests(all);
     return all[idx];
+  },
+
+  listLearningMoments(): { moments: LearningMoment[] } {
+    const sessions = readSessions().filter((s) => s.status === "verified");
+    const moments = sessions.map((s) => ({
+      id: `local-${s.id}`,
+      sessionId: s.id,
+      tuteeSlug: s.tuteeSlug,
+      tuteeName: s.tuteeName,
+      tutorUsername: s.tutorUsername,
+      subject: s.subject,
+      topic: s.topic,
+      score: s.verifyScore ?? null,
+      headline: s.fusedHeadline ?? null,
+      summary:
+        typeof s.memoryNotes?.aiSummary === "string"
+          ? s.memoryNotes.aiSummary
+          : typeof s.memoryNotes?.notes === "string"
+            ? s.memoryNotes.notes
+            : null,
+      practiceNext:
+        typeof s.memoryNotes?.practiceNext === "string" ? s.memoryNotes.practiceNext : null,
+      everosSaved: false,
+      learningMoment: Boolean(s.learningMoment),
+      mismatch: Boolean(s.verifyMismatch),
+      createdAt: s.updatedAt,
+    }));
+    return { moments };
   },
 
   generatePracticeProblems(sessionId: string): TutorOsSession {

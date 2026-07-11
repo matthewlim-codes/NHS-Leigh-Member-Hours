@@ -100,20 +100,7 @@ function readSessions(): TutorOsSession[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as TutorOsSession[];
     if (!Array.isArray(parsed)) return [];
-
-    const filtered = parsed.filter(
-      (s) =>
-        !(
-          (s.tuteeSlug === "maria" ||
-            s.tuteeSlug === "maria-garcia" ||
-            s.tuteeSlug === "jordan-lee") &&
-          (s.tutorUsername === "Matthew-Lim" || s.tutorUsername === "local-tutor")
-        ),
-    );
-    if (filtered.length !== parsed.length) {
-      writeSessions(filtered);
-    }
-    return filtered;
+    return parsed;
   } catch {
     return [];
   }

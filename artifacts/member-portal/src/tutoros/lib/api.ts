@@ -72,6 +72,8 @@ export interface PrepBrief {
   teacherNotes?: string[];
   /** AI-generated (or tutor-edited) practice problems */
   practiceProblems?: PracticeProblem[];
+  /** Prompts already shown this session — regenerate must never reuse these */
+  avoidedPracticePrompts?: string[];
   /** Course-material snippets cited in prep (RAG) */
   materialsCited?: string[];
   /** Teacher-uploaded worksheets the tutor should review with the student */

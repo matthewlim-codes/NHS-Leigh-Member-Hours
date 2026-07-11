@@ -27,13 +27,9 @@ function getApiKey(): string | undefined {
   return process.env.BUTTERBASE_API_KEY;
 }
 
+/** Always Claude Sonnet for practice regeneration. */
 function practiceModel(): string {
-  return (
-    process.env.TUTOROS_PRACTICE_AI_MODEL ||
-    process.env.TUTOROS_PREP_AI_MODEL ||
-    process.env.TUTOROS_AI_MODEL ||
-    "anthropic/claude-sonnet-4.6"
-  );
+  return process.env.TUTOROS_PRACTICE_AI_MODEL || "anthropic/claude-sonnet-4.6";
 }
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
@@ -158,17 +154,47 @@ function filterFreshProblems(
   });
 }
 
-function templateProblems(input: {
+function mulberry32(seed: number) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickUnique<T>(items: T[], count: number, rand: () => number, used: Set<string>, keyFn: (item: T) => string): T[] {
+  const pool = [...items];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  const out: T[] = [];
+  for (const item of pool) {
+    const key = keyFn(item);
+    if (used.has(key)) continue;
+    used.add(key);
+    out.push(item);
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
+/** Always-fresh template problems — never returns avoided prompts. */
+function synthesizeFreshProblems(input: {
   subject: string;
   topic: string;
   mode: PracticeDifficultyMode;
-  variant: number;
-  avoidPrompts?: string[];
+  seed: number;
+  avoidPrompts: string[];
 }): PracticeProblem[] {
   const topic = `${input.subject} ${input.topic}`.toLowerCase();
   const id = () => crypto.randomUUID();
   const band = difficultyBand(input.mode);
-  const avoid = new Set((input.avoidPrompts ?? []).map(promptKey));
+  const avoid = new Set(input.avoidPrompts.map(promptKey));
+  const rand = mulberry32(input.seed);
+  const used = new Set(avoid);
 
   if (
     topic.includes("passive") ||
@@ -176,65 +202,73 @@ function templateProblems(input: {
     topic.includes("essay") ||
     (topic.includes("english") && topic.includes("voice"))
   ) {
-    const voiceSets = [
-      [
-        {
-          prompt: 'Rewrite in active voice: "The essay was written by Maya overnight."',
-          answer: "Maya wrote the essay overnight.",
-        },
-        {
-          prompt: 'Rewrite in active voice: "The draft was revised by the peer tutor."',
-          answer: "The peer tutor revised the draft.",
-        },
-        {
-          prompt:
-            'Rewrite in active voice and keep the meaning: "Mistakes were made in the thesis statement."',
-          answer: "The student made mistakes in the thesis statement. (doer may be inferred)",
-        },
-      ],
-      [
-        {
-          prompt: 'Is this active or passive? "Ms. Rivera graded the essays." Explain why.',
-          answer: "Active — Ms. Rivera (subject) does the grading.",
-        },
-        {
-          prompt: 'Rewrite in passive voice: "Students submitted their outlines on Friday."',
-          answer: "The outlines were submitted by students on Friday.",
-        },
-        {
-          prompt:
-            'Fix the weak passive: "It was decided that the conclusion needed more evidence." Make it active and specific.',
-          answer: "The student decided the conclusion needed more evidence.",
-        },
-      ],
-      [
-        {
-          prompt: 'Rewrite in active voice: "The claim was supported by three quotes."',
-          answer: "Three quotes supported the claim. / The writer supported the claim with three quotes.",
-        },
-        {
-          prompt: 'Spot the passive verbs: "The paragraph was rewritten after feedback was given."',
-          answer: "was rewritten; was given",
-        },
-        {
-          prompt:
-            'Turn this into a strong active essay sentence: "Research was done on climate change by the class."',
-          answer: "The class researched climate change.",
-        },
-      ],
+    const doers = [
+      "Maya",
+      "the peer tutor",
+      "Ms. Rivera",
+      "the class",
+      "Jordan",
+      "the editor",
+      "Sam",
+      "the writing center",
+      "the student",
+      "the group",
     ];
-    let best = voiceSets[input.variant % voiceSets.length]!;
-    let bestOverlap = Infinity;
-    for (let i = 0; i < voiceSets.length; i++) {
-      const set = voiceSets[(input.variant + i) % voiceSets.length]!;
-      const overlap = set.filter((item) => avoid.has(promptKey(item.prompt))).length;
-      if (overlap < bestOverlap) {
-        bestOverlap = overlap;
-        best = set;
-        if (overlap === 0) break;
+    const objects = [
+      "essay",
+      "draft",
+      "outline",
+      "thesis",
+      "conclusion",
+      "introduction",
+      "paragraph",
+      "claim",
+      "counterargument",
+      "works-cited page",
+    ];
+    const verbs: Array<{ past: string; participle: string }> = [
+      { past: "wrote", participle: "written" },
+      { past: "revised", participle: "revised" },
+      { past: "submitted", participle: "submitted" },
+      { past: "graded", participle: "graded" },
+      { past: "supported", participle: "supported" },
+      { past: "rewrote", participle: "rewritten" },
+      { past: "published", participle: "published" },
+      { past: "analyzed", participle: "analyzed" },
+      { past: "cited", participle: "cited" },
+      { past: "challenged", participle: "challenged" },
+    ];
+
+    const candidates: Array<{ prompt: string; answer: string }> = [];
+    for (const doer of doers) {
+      for (const obj of objects) {
+        for (const verb of verbs) {
+          candidates.push({
+            prompt: `Rewrite in active voice: "The ${obj} was ${verb.participle} by ${doer}."`,
+            answer: `${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}.`,
+          });
+          candidates.push({
+            prompt: `Is this active or passive? "${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}." Explain why.`,
+            answer: `Active — ${doer} (subject) performs the action.`,
+          });
+          candidates.push({
+            prompt: `Rewrite in passive voice: "${doer.charAt(0).toUpperCase()}${doer.slice(1)} ${verb.past} the ${obj}."`,
+            answer: `The ${obj} was ${verb.participle} by ${doer}.`,
+          });
+        }
       }
     }
-    return best.map((item, i) => ({
+
+    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
+    while (picked.length < 3) {
+      const n = Math.floor(rand() * 9000) + 1000;
+      const prompt = `Rewrite in active voice (set ${n}): "The argument was weakened by vague evidence."`;
+      if (used.has(promptKey(prompt))) continue;
+      used.add(promptKey(prompt));
+      picked.push({ prompt, answer: "Vague evidence weakened the argument." });
+    }
+
+    return picked.map((item, i) => ({
       id: id(),
       difficulty: band[i]!,
       prompt: item.prompt,
@@ -251,38 +285,42 @@ function templateProblems(input: {
   }
 
   if (topic.includes("periodic") || topic.includes("electronegativity") || topic.includes("ionization")) {
-    const chemSets = [
-      [
-        {
-          prompt: "Which has a larger atomic radius: Na or Cl? Explain using periodic trends.",
-          answer: "Na — fewer protons pull less tightly across the period.",
-        },
-        {
-          prompt: "Which is more electronegative: O or S? Why?",
-          answer: "O — same group, smaller radius / higher attraction higher up.",
-        },
-        {
-          prompt: "Why does ionization energy generally increase left→right across a period?",
-          answer: "Increasing nuclear charge holds electrons more tightly.",
-        },
-      ],
-      [
-        {
-          prompt: "Rank F, N, and C from lowest to highest electronegativity.",
-          answer: "C < N < F",
-        },
-        {
-          prompt: "Explain why K has a lower first ionization energy than Na.",
-          answer: "K’s valence electron is farther from the nucleus (more shells).",
-        },
-        {
-          prompt: "Predict which is smaller: Mg²⁺ or Na⁺. Explain.",
-          answer: "Mg²⁺ — same electron count, more protons → smaller radius.",
-        },
-      ],
-    ];
-    const set = chemSets[input.variant % chemSets.length]!;
-    return set.map((item, i) => ({
+    const pairs = [
+      ["Na", "Cl", "radius", "Na is larger — radius shrinks left→right."],
+      ["O", "S", "electronegativity", "O is higher — EN rises up a group."],
+      ["F", "N", "electronegativity", "F > N across period 2."],
+      ["K", "Na", "ionization", "K is lower — valence electron is farther out."],
+      ["Mg", "Al", "radius", "Mg is larger than Al in period 3."],
+      ["C", "F", "electronegativity", "F is highest — far right of period 2."],
+      ["Li", "F", "ionization", "F has higher IE — nuclear charge rises across the period."],
+      ["P", "N", "electronegativity", "N is higher — same group, smaller up the column."],
+      ["Ca", "Br", "radius", "Ca is larger — metals left, nonmetals right."],
+      ["Be", "O", "ionization", "O has higher IE across period 2."],
+    ] as const;
+
+    const candidates = pairs.map(([a, b, kind, answer]) => ({
+      prompt:
+        kind === "radius"
+          ? `Which has a larger atomic radius: ${a} or ${b}? Explain using periodic trends.`
+          : kind === "electronegativity"
+            ? `Which is more electronegative: ${a} or ${b}? Why?`
+            : `Compare first ionization energy for ${a} vs ${b}. Which is higher and why?`,
+      answer,
+    }));
+
+    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
+    while (picked.length < 3) {
+      const n = Math.floor(rand() * 90) + 10;
+      const prompt = `Explain one periodic trend using elements in period ${n % 3 === 0 ? 2 : 3} (variant ${n}).`;
+      if (used.has(promptKey(prompt))) continue;
+      used.add(promptKey(prompt));
+      picked.push({
+        prompt,
+        answer: "Across a period left→right: radius shrinks; EN and IE rise.",
+      });
+    }
+
+    return picked.map((item, i) => ({
       id: id(),
       difficulty: band[i]!,
       prompt: item.prompt,
@@ -298,58 +336,50 @@ function templateProblems(input: {
     }));
   }
 
-  const factorSets = [
-    [
-      { d: band[0], prompt: "Factor: x² + 5x + 6", a: "(x + 2)(x + 3)", nums: "2 and 3" },
-      { d: band[1], prompt: "Factor: x² + 9x + 18", a: "(x + 3)(x + 6)", nums: "3 and 6" },
-      { d: band[2], prompt: "Factor: x² − 2x − 24", a: "(x − 6)(x + 4)", nums: "−6 and 4" },
-    ],
-    [
-      { d: band[0], prompt: "Factor: x² + 8x + 15", a: "(x + 3)(x + 5)", nums: "3 and 5" },
-      { d: band[1], prompt: "Factor: x² − 5x − 14", a: "(x − 7)(x + 2)", nums: "−7 and 2" },
-      { d: band[2], prompt: "Factor: x² + x − 30", a: "(x + 6)(x − 5)", nums: "6 and −5" },
-    ],
-    [
-      { d: band[0], prompt: "Factor: x² + 7x + 12", a: "(x + 3)(x + 4)", nums: "3 and 4" },
-      { d: band[1], prompt: "Factor: x² − 8x + 12", a: "(x − 6)(x − 2)", nums: "−6 and −2" },
-      { d: band[2], prompt: "Factor: x² − x − 20", a: "(x − 5)(x + 4)", nums: "−5 and 4" },
-    ],
-    [
-      { d: band[0], prompt: "Factor: x² + 6x + 8", a: "(x + 2)(x + 4)", nums: "2 and 4" },
-      { d: band[1], prompt: "Factor: x² − 3x − 10", a: "(x − 5)(x + 2)", nums: "−5 and 2" },
-      { d: band[2], prompt: "Factor: x² + 4x − 21", a: "(x + 7)(x − 3)", nums: "7 and −3" },
-    ],
-    [
-      { d: band[0], prompt: "Factor: x² + 11x + 24", a: "(x + 3)(x + 8)", nums: "3 and 8" },
-      { d: band[1], prompt: "Factor: x² − 7x + 10", a: "(x − 5)(x − 2)", nums: "−5 and −2" },
-      { d: band[2], prompt: "Factor: x² − 4x − 32", a: "(x − 8)(x + 4)", nums: "−8 and 4" },
-    ],
-    [
-      { d: band[0], prompt: "Factor: x² + 10x + 21", a: "(x + 3)(x + 7)", nums: "3 and 7" },
-      { d: band[1], prompt: "Factor: x² + 2x − 35", a: "(x + 7)(x − 5)", nums: "7 and −5" },
-      { d: band[2], prompt: "Factor: x² − 9x + 20", a: "(x − 4)(x − 5)", nums: "−4 and −5" },
-    ],
-  ];
-
   if (topic.includes("factor") || topic.includes("algebra") || topic.includes("im2")) {
-    let best = factorSets[input.variant % factorSets.length]!;
-    let bestOverlap = Infinity;
-    for (let i = 0; i < factorSets.length; i++) {
-      const set = factorSets[(input.variant + i) % factorSets.length]!;
-      const overlap = set.filter((item) => avoid.has(promptKey(item.prompt))).length;
-      if (overlap < bestOverlap) {
-        bestOverlap = overlap;
-        best = set;
-        if (overlap === 0) break;
+    const pairs: Array<[number, number]> = [];
+    for (let p = -12; p <= 12; p++) {
+      if (p === 0) continue;
+      for (let q = p; q <= 12; q++) {
+        if (q === 0) continue;
+        pairs.push([p, q]);
       }
     }
-    return best.map((item) => ({
+
+    const candidates = pairs.map(([p, q]) => {
+      const b = p + q;
+      const c = p * q;
+      const bTerm = b === 0 ? "" : b > 0 ? ` + ${b}x` : ` − ${Math.abs(b)}x`;
+      const cTerm = c === 0 ? "" : c > 0 ? ` + ${c}` : ` − ${Math.abs(c)}`;
+      const fmt = (n: number) => (n >= 0 ? `+ ${n}` : `− ${Math.abs(n)}`);
+      return {
+        prompt: `Factor: x²${bTerm}${cTerm}`,
+        answer: `(x ${fmt(p)})(x ${fmt(q)})`,
+        nums: `${p} and ${q}`,
+      };
+    });
+
+    const picked = pickUnique(candidates, 3, rand, used, (c) => promptKey(c.prompt));
+    while (picked.length < 3) {
+      const p = Math.floor(rand() * 9) + 2;
+      const q = Math.floor(rand() * 9) + 2;
+      const prompt = `Factor: x² + ${p + q}x + ${p * q}`;
+      if (used.has(promptKey(prompt))) continue;
+      used.add(promptKey(prompt));
+      picked.push({
+        prompt,
+        answer: `(x + ${p})(x + ${q})`,
+        nums: `${p} and ${q}`,
+      });
+    }
+
+    return picked.map((item, i) => ({
       id: id(),
-      difficulty: item.d!,
+      difficulty: band[i]!,
       prompt: item.prompt,
       steps: [
         { label: "Set up", detail: `Find two numbers that multiply and add correctly → ${item.nums}.` },
-        { label: "Write", detail: `Answer: ${item.a}.` },
+        { label: "Write", detail: `Answer: ${item.answer}.` },
         { label: "Check", detail: "Expand briefly to confirm the middle term." },
       ],
       discussionStems: [
@@ -359,21 +389,30 @@ function templateProblems(input: {
     }));
   }
 
-  const nonce = (input.variant % 900) + 100;
-  return band.map((d, i) => ({
-    id: id(),
-    difficulty: d,
-    prompt: `${input.subject} · ${input.topic} practice ${i + 1} (${d}) [#${nonce}]: create and complete one concrete task that matches today's goal — stay on this subject/topic only.`,
-    steps: [
-      { label: "Frame", detail: `Restate the ${input.topic} idea for ${input.subject} in one sentence.` },
-      { label: "Try", detail: "Attempt the task out loud, one step at a time." },
-      { label: "Check", detail: "Explain why the answer makes sense for this topic." },
-    ],
-    discussionStems: [
-      "What is the first move you would make?",
-      "Where could a common mistake show up for this topic?",
-    ],
-  }));
+  const nonce = Math.floor(rand() * 9000) + 1000;
+  return band.map((d, i) => {
+    let prompt = "";
+    let attempt = 0;
+    do {
+      prompt = `${input.subject} · ${input.topic} practice ${i + 1} (${d}) [#${nonce + attempt + i * 17}]: complete one concrete task for this subject/topic only.`;
+      attempt++;
+    } while (used.has(promptKey(prompt)) && attempt < 20);
+    used.add(promptKey(prompt));
+    return {
+      id: id(),
+      difficulty: d,
+      prompt,
+      steps: [
+        { label: "Frame", detail: `Restate the ${input.topic} idea for ${input.subject} in one sentence.` },
+        { label: "Try", detail: "Attempt the task out loud, one step at a time." },
+        { label: "Check", detail: "Explain why the answer makes sense for this topic." },
+      ],
+      discussionStems: [
+        "What is the first move you would make?",
+        "Where could a common mistake show up for this topic?",
+      ],
+    };
+  });
 }
 
 async function chatCompletion(messages: Array<{ role: string; content: string }>): Promise<string | null> {
@@ -388,7 +427,7 @@ async function chatCompletion(messages: Array<{ role: string; content: string }>
     },
     body: JSON.stringify({
       model: practiceModel(),
-      temperature: 0.7,
+      temperature: 0.95,
       max_tokens: 2200,
       messages,
     }),
@@ -438,27 +477,29 @@ export async function generatePracticeProblems(input: {
     : [];
   const avoidPromptsMerged = [...new Set([...avoidPrompts, ...memoryAvoid])];
   const band = difficultyBand(mode);
-  const variant = Date.now() % 1000;
-  const fallback = templateProblems({
-    subject: input.subject,
-    topic: input.topic,
-    mode,
-    variant,
-    avoidPrompts: avoidPromptsMerged,
-  });
+  const seed = Date.now() ^ (Math.floor(Math.random() * 1_000_000) << 1);
+
+  const freshTemplates = () =>
+    synthesizeFreshProblems({
+      subject: input.subject,
+      topic: input.topic,
+      mode,
+      seed: seed + Math.floor(Math.random() * 10_000),
+      avoidPrompts: avoidPromptsMerged,
+    });
 
   try {
     const content = await chatCompletion([
       {
         role: "system",
         content: [
-          "You are TutorOS Practice Problem Generator for high-school peer tutoring.",
-          "Generate NEW practice problems that are NOT duplicates of previous ones.",
+          "You are TutorOS Practice Problem Generator powered by Claude Sonnet.",
+          "Generate brand-new practice problems that are NEVER duplicates of avoided prompts.",
           "CRITICAL: Every prompt must be extremely specific to the given SUBJECT and TOPIC.",
           "Never generate algebra/factoring problems for English. Never generate grammar for chemistry or math.",
-          "For English passive vs active voice: use concrete sentence rewrite / classify tasks.",
-          "For chemistry periodic trends: use radius / electronegativity / ionization comparisons.",
-          "For factoring: use quadratic factoring prompts only.",
+          "For English passive vs active voice: use concrete sentence rewrite / classify tasks with NEW sentences each time.",
+          "For chemistry periodic trends: use radius / electronegativity / ionization comparisons with NEW element pairs.",
+          "For factoring: use NEW quadratic expressions each time (different coefficients).",
           "Return ONLY valid JSON:",
           '{ "practiceProblems": [',
           "  {",
@@ -471,7 +512,7 @@ export async function generatePracticeProblems(input: {
           "Rules:",
           `- Exactly 3 problems with difficulties roughly: ${band.join(", ")} (in that order).`,
           "- Prompts must be brand-new — never reuse avoided prompts or near-paraphrases.",
-          "- Use prior memory: if the student struggled, scaffold; if they improved, push transfer.",
+          "- Change numbers, sentences, or element pairs so regenerate always feels fresh.",
           "- Steps: 2-5 per problem. Discussion stems: 2-4 open questions.",
           "- Match high-school level. No surveillance language.",
         ].join("\n"),
@@ -484,23 +525,19 @@ export async function generatePracticeProblems(input: {
           `Topic: ${input.topic}`,
           "Hard constraint: stay on this subject/topic only.",
           `Difficulty mode: ${mode} (target band: ${band.join(" → ")})`,
-          `Freshness nonce: ${variant}`,
+          `Freshness nonce: ${seed}`,
           memorySummary(memory),
           briefSummary(input.prepBrief),
           avoidPromptsMerged.length
             ? `DO NOT generate these (or close variants):\n${avoidPromptsMerged.map((p) => `- ${p}`).join("\n")}`
             : "No prior prompts to avoid.",
           "",
-          "Generate three fresh practice problems for this session.",
+          "Generate three completely fresh practice problems now.",
         ].join("\n"),
       },
     ]);
 
-    if (!content) {
-      return filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic).length
-        ? filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic)
-        : fallback;
-    }
+    if (!content) return freshTemplates();
 
     const parsed = extractJsonObject(content);
     let problems = filterFreshProblems(
@@ -509,21 +546,33 @@ export async function generatePracticeProblems(input: {
       input.subject,
       input.topic,
     );
+
     if (problems.length < 3) {
       const extras = filterFreshProblems(
-        fallback,
+        freshTemplates(),
         [...avoidPromptsMerged, ...problems.map((p) => p.prompt)],
         input.subject,
         input.topic,
       );
       problems = [...problems, ...extras].slice(0, 3);
     }
-    if (problems.length === 0) return fallback;
+
+    if (problems.length < 3) {
+      problems = [
+        ...problems,
+        ...synthesizeFreshProblems({
+          subject: input.subject,
+          topic: input.topic,
+          mode,
+          seed: seed + 99,
+          avoidPrompts: [...avoidPromptsMerged, ...problems.map((p) => p.prompt)],
+        }),
+      ].slice(0, 3);
+    }
+
     return problems.slice(0, 3);
   } catch {
-    return filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic).length
-      ? filterFreshProblems(fallback, avoidPromptsMerged, input.subject, input.topic)
-      : fallback;
+    return freshTemplates();
   }
 }
 

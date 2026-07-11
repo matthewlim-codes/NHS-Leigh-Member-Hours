@@ -813,17 +813,33 @@ export const localTutorOs = {
       ? memory.profile.practicedPrompts.map(String)
       : [];
     const current = (session.prepBrief.practiceProblems ?? []).map((p) => p.prompt);
+    const history = Array.isArray(session.prepBrief.avoidedPracticePrompts)
+      ? session.prepBrief.avoidedPracticePrompts.map(String)
+      : [];
+    const avoidPrompts = [
+      ...new Set([
+        ...(options?.avoidPrompts ?? []),
+        ...current,
+        ...history,
+        ...memoryAvoid,
+      ]),
+    ];
     const practiceProblems = templatePracticeProblems({
       subject: session.subject,
       topic: session.topic,
       difficultyMode: options?.difficultyMode ?? "same",
-      avoidPrompts: [
-        ...new Set([...(options?.avoidPrompts ?? []), ...current, ...memoryAvoid]),
-      ],
+      avoidPrompts,
     });
     return upsertSession({
       ...session,
-      prepBrief: { ...session.prepBrief, practiceProblems },
+      prepBrief: {
+        ...session.prepBrief,
+        practiceProblems,
+        avoidedPracticePrompts: [
+          ...avoidPrompts,
+          ...practiceProblems.map((p) => p.prompt),
+        ].slice(-80),
+      },
       updatedAt: new Date().toISOString(),
     });
   },

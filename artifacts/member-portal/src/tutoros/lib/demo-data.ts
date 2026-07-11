@@ -1,5 +1,5 @@
 /**
- * Demo students and teacher requests — aligned with the teacher portal placeholders.
+ * Demo students and teacher requests — aligned with teacher-assign template cards.
  * Keep in sync with artifacts/api-server/src/lib/tutoros-demo-data.ts
  */
 
@@ -37,48 +37,63 @@ export interface DemoTutoringRequestSeed {
   subject: string;
   topic: string;
   notes: string;
+  createdAt: string;
 }
 
+export const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
+
+/** Demo open requests teachers would post for tutors to claim. */
 export const DEMO_TUTORING_REQUESTS: DemoTutoringRequestSeed[] = [
   {
-    id: "demo-req-maria-garcia",
-    studentName: "Maria Garcia",
+    id: "template-math-im2-jordan",
+    studentName: "Jordan Lee",
     grade: "10",
-    assignedBy: "Ms. Chen · Period 3",
-    subject: "Algebra II",
-    topic: "factoring quadratics",
-    notes:
-      "Recent quiz showed sign errors when factoring. Struggles with word problems; prefers visuals and step-by-step models.",
+    assignedBy: "Ms. Patel · IM2 Period 2",
+    subject: "Algebra II / IM2",
+    topic: "factoring",
+    notes: "Needs help factoring quadratics before the unit quiz. Prefers worked examples.",
+    createdAt: TEMPLATE_CREATED_AT,
   },
   {
-    id: "demo-req-alex-rivera",
-    studentName: "Alex Rivera",
-    grade: "10",
-    assignedBy: "Ms. Chen · Period 3",
-    subject: "Algebra II",
-    topic: "factoring quadratics",
+    id: "template-chem-honors-sam",
+    studentName: "Sam Nguyen",
+    grade: "11",
+    assignedBy: "Mr. Ortiz · Chemistry Honors",
+    subject: "Chemistry Honors",
+    topic: "periodic trends",
     notes:
-      "Struggles with word problems; prefers visuals. Needs help connecting factors back to the original equation.",
+      "Struggles with electronegativity, atomic radius, and ionization energy across the periodic table.",
+    createdAt: "2026-07-11T16:05:00.000Z",
+  },
+  {
+    id: "template-english-maya",
+    studentName: "Maya Brooks",
+    grade: "9",
+    assignedBy: "Ms. Rivera · English 9",
+    subject: "English",
+    topic: "essay writing · passive vs active voice",
+    notes:
+      "Essay drafts lean on passive voice. Needs grammar rules and practice rewriting sentences in active voice.",
+    createdAt: "2026-07-11T16:10:00.000Z",
   },
 ];
 
-const MARIA = DEMO_TUTORING_REQUESTS[0];
+const JORDAN = DEMO_TUTORING_REQUESTS[0];
 
-export function buildMariaGarciaMemory(): DemoTuteeMemorySeed {
+/** First-session tutee memory — no prior TutorOS episodes, teacher notes only. */
+export function buildJordanLeeMemory(): DemoTuteeMemorySeed {
   return {
-    tuteeSlug: slugifyTutee(MARIA.studentName),
-    tuteeName: MARIA.studentName,
+    tuteeSlug: slugifyTutee(JORDAN.studentName),
+    tuteeName: JORDAN.studentName,
     profile: {
-      grade: MARIA.grade,
-      assignedBy: MARIA.assignedBy,
+      grade: JORDAN.grade,
+      assignedBy: JORDAN.assignedBy,
       teacherNotes: [
-        `Assigned by ${MARIA.assignedBy} for ${MARIA.subject}`,
-        "Recent quiz showed sign errors when factoring trinomials",
-        "Struggles with word problems — prefers visual, step-by-step models",
-        "Confidence drops quickly when signs flip; start with encouragement",
+        `Assigned by ${JORDAN.assignedBy} for ${JORDAN.subject}`,
+        JORDAN.notes,
       ],
-      preferredApproach: "visual / step-by-step",
-      struggles: ["sign errors when factoring", "word problems feel overwhelming"],
+      preferredApproach: "worked examples / step-by-step",
+      struggles: ["factoring quadratics before the unit quiz"],
       skills: [],
     },
     episodes: [],
@@ -86,8 +101,8 @@ export function buildMariaGarciaMemory(): DemoTuteeMemorySeed {
 }
 
 export function buildDemoTuteeMemoryMap(): Record<string, DemoTuteeMemorySeed> {
-  const maria = buildMariaGarciaMemory();
-  return { [maria.tuteeSlug]: maria };
+  const jordan = buildJordanLeeMemory();
+  return { [jordan.tuteeSlug]: jordan };
 }
 
 export function teacherNotesFromMemory(

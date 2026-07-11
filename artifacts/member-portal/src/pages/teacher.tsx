@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useGetMe, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, LogOut, Users } from "lucide-react";
 import {
@@ -8,14 +8,16 @@ import {
   listTutoringRequests,
   type TutoringRequest,
 } from "@/tutoros/lib/api";
+import { useAuthUser, logoutLocalTeacher } from "@/hooks/use-auth-user";
 
 const SUBJECTS = [
   "Algebra I",
-  "Algebra II",
+  "Algebra II / IM2",
   "Geometry",
   "Precalculus",
   "Biology",
   "Chemistry",
+  "Chemistry Honors",
   "English",
   "Digital SAT Math",
 ];
@@ -26,7 +28,7 @@ const emptyForm = {
   studentName: "",
   grade: "10",
   assignedBy: "",
-  subject: "Algebra II",
+  subject: "Algebra II / IM2",
   topic: "",
   notes: "",
 };
@@ -34,9 +36,7 @@ const emptyForm = {
 export default function TeacherPortalPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: user } = useGetMe({
-    query: { queryKey: getGetMeQueryKey(), retry: false },
-  });
+  const { user } = useAuthUser();
   const logout = useLogout();
 
   const [requests, setRequests] = useState<TutoringRequest[]>([]);
@@ -91,6 +91,7 @@ export default function TeacherPortalPage() {
   };
 
   const onLogout = () => {
+    logoutLocalTeacher();
     logout.mutate(undefined, {
       onSettled: () => {
         queryClient.setQueryData(getGetMeQueryKey(), undefined);
@@ -188,7 +189,7 @@ export default function TeacherPortalPage() {
                 value={form.studentName}
                 onChange={(e) => setForm((f) => ({ ...f, studentName: e.target.value }))}
                 className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-emerald-600 focus:bg-white"
-                placeholder="Alex Rivera"
+                placeholder="Jordan Lee"
                 required
                 data-testid="input-student-name"
               />
@@ -234,7 +235,7 @@ export default function TeacherPortalPage() {
                 value={form.assignedBy}
                 onChange={(e) => setForm((f) => ({ ...f, assignedBy: e.target.value }))}
                 className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-emerald-600 focus:bg-white"
-                placeholder="Ms. Chen · Period 3"
+                placeholder="Ms. Patel · IM2 Period 2"
                 required
                 data-testid="input-assigned-by"
               />
@@ -246,7 +247,7 @@ export default function TeacherPortalPage() {
                 value={form.topic}
                 onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
                 className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-emerald-600 focus:bg-white"
-                placeholder="factoring quadratics"
+                placeholder="factoring"
                 required
                 data-testid="input-topic"
               />
@@ -258,7 +259,7 @@ export default function TeacherPortalPage() {
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 className="min-h-[80px] w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-base outline-none focus:border-emerald-600 focus:bg-white"
-                placeholder="Struggles with word problems; prefers visuals"
+                placeholder="Needs help before the unit quiz; prefers worked examples"
                 data-testid="input-notes"
               />
             </label>

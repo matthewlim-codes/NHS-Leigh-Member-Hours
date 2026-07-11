@@ -2,9 +2,9 @@ import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
@@ -27,22 +27,17 @@ function homeForRole(role?: string) {
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
-  const { data: user, isSuccess, isError, isLoading } = useGetMe({
-    query: {
-      queryKey: getGetMeQueryKey(),
-      retry: false,
-    },
-  });
+  const { user, isAuthenticated, isError, isLoading } = useAuthUser();
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (isError && !isPublicPath(location)) {
+    if (isError && !isAuthenticated && !isPublicPath(location)) {
       setLocation("/login");
       return;
     }
 
-    if (isSuccess && user) {
+    if (isAuthenticated && user) {
       const isTeacher = user.role === "teacher";
 
       if (location === "/login" || location === "/") {
@@ -64,9 +59,9 @@ function AuthGate({ children }: { children: React.ReactNode }) {
         setLocation("/tutoros");
       }
     }
-  }, [isLoading, isError, isSuccess, user, location, setLocation]);
+  }, [isLoading, isError, isAuthenticated, user, location, setLocation]);
 
-  if (isLoading && location === "/") {
+  if (isLoading && location === "/" && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground">Loading...</div>

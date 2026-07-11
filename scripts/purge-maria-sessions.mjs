@@ -8,7 +8,7 @@ const APP_ID = process.env.BUTTERBASE_APP_ID ?? "app_tsc2mvlq21yo";
 const API_BASE = process.env.BUTTERBASE_API_URL ?? `https://api.butterbase.ai/v1/${APP_ID}`;
 const API_KEY = process.env.BUTTERBASE_API_KEY ?? process.env.butterbase_api_key;
 const TUTOR = "Matthew-Lim";
-const TUTEE_SLUGS = ["maria", "maria-garcia"];
+const TUTEE_SLUGS = ["maria", "maria-garcia", "jordan-lee"];
 
 if (!API_KEY) {
   console.error("BUTTERBASE_API_KEY is required");

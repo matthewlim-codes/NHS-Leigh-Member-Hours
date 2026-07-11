@@ -5,11 +5,12 @@ import { startSession } from "../lib/api";
 
 const SUBJECTS = [
   "Algebra I",
-  "Algebra II",
+  "Algebra II / IM2",
   "Geometry",
   "Precalculus",
   "Biology",
   "Chemistry",
+  "Chemistry Honors",
   "English",
   "Digital SAT Math",
 ];
@@ -31,11 +32,11 @@ export default function TutorOsStartPage() {
     [search],
   );
 
-  const [tuteeName, setTuteeName] = useState(prefill.tutee || "Maria Garcia");
+  const [tuteeName, setTuteeName] = useState(prefill.tutee || "Jordan Lee");
   const [subject, setSubject] = useState(
-    SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II",
+    SUBJECTS.includes(prefill.subject) ? prefill.subject : prefill.subject || "Algebra II / IM2",
   );
-  const [topic, setTopic] = useState(prefill.topic || "factoring quadratics");
+  const [topic, setTopic] = useState(prefill.topic || "factoring");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +77,7 @@ export default function TutorOsStartPage() {
             value={tuteeName}
             onChange={(e) => setTuteeName(e.target.value)}
             className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-base outline-none focus:border-[#1865F2] focus:bg-white focus:ring-2 focus:ring-[#1865F2]/20"
-            placeholder="Maria Garcia"
+            placeholder="Jordan Lee"
             required
           />
         </label>

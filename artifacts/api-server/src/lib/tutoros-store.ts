@@ -693,28 +693,28 @@ export interface TutoringRequest {
 
 const requestFallback = new Map<string, TutoringRequest>();
 
-function seedDemoRequests() {
-  if (requestFallback.size > 0) return;
-  const now = new Date().toISOString();
+function seedTemplateRequests() {
   for (const demo of DEMO_TUTORING_REQUESTS) {
-    requestFallback.set(demo.id, {
-      id: demo.id,
-      studentName: demo.studentName,
-      grade: demo.grade,
-      assignedBy: demo.assignedBy,
-      subject: demo.subject,
-      topic: demo.topic,
-      notes: demo.notes,
-      status: "open",
-      claimedByUsername: null,
-      claimedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!requestFallback.has(demo.id)) {
+      requestFallback.set(demo.id, {
+        id: demo.id,
+        studentName: demo.studentName,
+        grade: demo.grade,
+        assignedBy: demo.assignedBy,
+        subject: demo.subject,
+        topic: demo.topic,
+        notes: demo.notes,
+        status: "open",
+        claimedByUsername: null,
+        claimedAt: null,
+        createdAt: demo.createdAt,
+        updatedAt: demo.createdAt,
+      });
+    }
   }
 }
 
-seedDemoRequests();
+seedTemplateRequests();
 
 export async function createTutoringRequest(input: {
   studentName: string;
@@ -746,7 +746,7 @@ export async function createTutoringRequest(input: {
 export async function listTutoringRequests(filter?: {
   status?: TutoringRequestStatus;
 }): Promise<TutoringRequest[]> {
-  seedDemoRequests();
+  seedTemplateRequests();
   const all = Array.from(requestFallback.values());
   const filtered = filter?.status ? all.filter((r) => r.status === filter.status) : all;
   return filtered.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));

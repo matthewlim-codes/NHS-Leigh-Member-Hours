@@ -4,8 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useLogin,
   useTeacherLogin,
-  useGetMe,
   getGetMeQueryKey,
+  type AuthUser,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -16,6 +16,13 @@ import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { GraduationCap, School } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  isValidTeacherCode,
+  LOCAL_TEACHER_USER,
+  setLocalTeacherUser,
+  clearLocalTeacherUser,
+} from "@/lib/local-teacher-auth";
+import { useAuthUser, notifyLocalTeacherAuthChanged } from "@/hooks/use-auth-user";
 
 const studentSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -34,23 +41,26 @@ function homeForRole(role?: string) {
   return role === "teacher" ? "/teacher" : "/tutoros";
 }
 
+function isMissingRouteError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const status = (error as { status?: number }).status;
+  return status === 404 || status === 405;
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [roleChoice, setRoleChoice] = useState<RoleChoice>("chooser");
+  const [teacherError, setTeacherError] = useState<string | null>(null);
+  const [teacherPending, setTeacherPending] = useState(false);
 
-  const { data: user, isSuccess } = useGetMe({
-    query: {
-      queryKey: getGetMeQueryKey(),
-      retry: false,
-    },
-  });
+  const { user, isAuthenticated } = useAuthUser();
 
   useEffect(() => {
-    if (isSuccess && user) {
+    if (isAuthenticated && user) {
       setLocation(homeForRole(user.role));
     }
-  }, [isSuccess, user, setLocation]);
+  }, [isAuthenticated, user, setLocation]);
 
   const loginMutation = useLogin();
   const teacherLoginMutation = useTeacherLogin();
@@ -65,28 +75,62 @@ export default function LoginPage() {
     defaultValues: { code: "" },
   });
 
+  const finishLogin = (data: AuthUser) => {
+    queryClient.setQueryData(getGetMeQueryKey(), data);
+    setLocation(homeForRole(data.role));
+  };
+
   const onStudentSubmit = (values: StudentFormValues) => {
+    clearLocalTeacherUser();
+    notifyLocalTeacherAuthChanged();
     loginMutation.mutate(
       { data: values },
       {
         onSuccess: (data) => {
-          queryClient.setQueryData(getGetMeQueryKey(), data);
-          setLocation(homeForRole(data.role));
+          finishLogin({ ...data, role: data.role ?? "member" });
         },
       },
     );
   };
 
-  const onTeacherSubmit = (values: TeacherFormValues) => {
-    teacherLoginMutation.mutate(
-      { data: values },
-      {
-        onSuccess: (data) => {
-          queryClient.setQueryData(getGetMeQueryKey(), data);
-          setLocation(homeForRole(data.role));
-        },
-      },
-    );
+  const onTeacherSubmit = async (values: TeacherFormValues) => {
+    setTeacherError(null);
+    setTeacherPending(true);
+
+    if (!isValidTeacherCode(values.code)) {
+      setTeacherError("Invalid teacher access code");
+      setTeacherPending(false);
+      return;
+    }
+
+    try {
+      const data = await teacherLoginMutation.mutateAsync({
+        data: { code: values.code.trim() },
+      });
+      finishLogin(data);
+    } catch (error) {
+      // Live API may not have teacher-login yet — unlock with local session.
+      if (isMissingRouteError(error) || error instanceof TypeError) {
+        const local = setLocalTeacherUser(LOCAL_TEACHER_USER);
+        notifyLocalTeacherAuthChanged();
+        finishLogin(local);
+        return;
+      }
+
+      const message =
+        error &&
+        typeof error === "object" &&
+        "data" in error &&
+        error.data &&
+        typeof error.data === "object" &&
+        "error" in error.data &&
+        typeof (error.data as { error?: unknown }).error === "string"
+          ? (error.data as { error: string }).error
+          : "Invalid access code. Please try again.";
+      setTeacherError(message);
+    } finally {
+      setTeacherPending(false);
+    }
   };
 
   return (
@@ -270,6 +314,7 @@ export default function LoginPage() {
                 onClick={() => {
                   setRoleChoice("chooser");
                   teacherLoginMutation.reset();
+                  setTeacherError(null);
                 }}
                 className="mb-4 text-sm font-semibold text-[#1865F2]"
               >
@@ -278,12 +323,9 @@ export default function LoginPage() {
               <h2 className="text-xl font-bold text-slate-900">Teacher sign in</h2>
               <p className="mt-1 text-sm text-slate-500">Enter the teacher access code</p>
 
-              {teacherLoginMutation.isError && (
+              {teacherError && (
                 <Alert variant="destructive" className="mt-4" data-testid="alert-teacher-login-error">
-                  <AlertDescription>
-                    {teacherLoginMutation.error?.data?.error ||
-                      "Invalid access code. Please try again."}
-                  </AlertDescription>
+                  <AlertDescription>{teacherError}</AlertDescription>
                 </Alert>
               )}
 
@@ -316,10 +358,10 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     className="h-12 w-full rounded-full bg-emerald-600 text-base font-semibold hover:bg-emerald-700"
-                    disabled={teacherLoginMutation.isPending}
+                    disabled={teacherPending}
                     data-testid="button-submit-teacher-login"
                   >
-                    {teacherLoginMutation.isPending ? "Signing in..." : "Continue as teacher"}
+                    {teacherPending ? "Signing in..." : "Continue as teacher"}
                   </Button>
                 </form>
               </Form>

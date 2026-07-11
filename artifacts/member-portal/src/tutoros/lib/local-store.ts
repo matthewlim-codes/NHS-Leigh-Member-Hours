@@ -26,6 +26,9 @@ import {
 const SESSIONS_KEY = "tutoros-sessions-v1";
 const MEMORY_KEY = "tutoros-memory-v2";
 const REQUESTS_KEY = "tutoros-requests-v1";
+const REQUESTS_SEED_KEY = "tutoros-requests-seed-v";
+/** Bump to force-reset placeholder student cards to the original 3 open demos. */
+const REQUESTS_SEED_VERSION = "demo-students-v3-open-uuid";
 const PREP_FN_URL = "https://api.butterbase.ai/v1/app_tsc2mvlq21yo/fn/prep-brief";
 
 const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
@@ -33,7 +36,7 @@ const TEMPLATE_CREATED_AT = "2026-07-11T16:00:00.000Z";
 /** Demo open requests teachers would post for tutors to claim. */
 const TEMPLATE_TUTORING_REQUESTS: TutoringRequest[] = [
   {
-    id: "template-math-im2-jordan",
+    id: "11111111-1111-4111-8111-111111111101",
     studentName: "Jordan Lee",
     grade: "10",
     assignedBy: "Ms. Patel · IM2 Period 2",
@@ -47,7 +50,7 @@ const TEMPLATE_TUTORING_REQUESTS: TutoringRequest[] = [
     updatedAt: TEMPLATE_CREATED_AT,
   },
   {
-    id: "template-chem-honors-sam",
+    id: "11111111-1111-4111-8111-111111111102",
     studentName: "Sam Nguyen",
     grade: "11",
     assignedBy: "Mr. Ortiz · Chemistry Honors",
@@ -62,7 +65,7 @@ const TEMPLATE_TUTORING_REQUESTS: TutoringRequest[] = [
     updatedAt: "2026-07-11T16:05:00.000Z",
   },
   {
-    id: "template-english-maya",
+    id: "11111111-1111-4111-8111-111111111103",
     studentName: "Maya Brooks",
     grade: "9",
     assignedBy: "Ms. Rivera · English 9",
@@ -419,7 +422,28 @@ function demoRequestToTutoringRequest(demo: (typeof DEMO_TUTORING_REQUESTS)[numb
 }
 
 function ensureTemplateRequests(existing: TutoringRequest[]): TutoringRequest[] {
-  const byId = new Map(existing.map((r) => [r.id, r]));
+  const legacyTemplateIds = new Set([
+    "template-math-im2-jordan",
+    "template-chem-honors-sam",
+    "template-english-maya",
+  ]);
+  const seedVersion = localStorage.getItem(REQUESTS_SEED_KEY);
+  if (seedVersion !== REQUESTS_SEED_VERSION) {
+    // Full reset: only the original 3 placeholder students, all open / untutored.
+    const templates = DEMO_TUTORING_REQUESTS.map(demoRequestToTutoringRequest);
+    writeRequests(templates);
+    localStorage.setItem(REQUESTS_SEED_KEY, REQUESTS_SEED_VERSION);
+    // Clear prior demo tutoring history so cards look first-session.
+    localStorage.removeItem(SESSIONS_KEY);
+    localStorage.removeItem(MEMORY_KEY);
+    return templates;
+  }
+
+  const byId = new Map(
+    existing
+      .filter((r) => !legacyTemplateIds.has(r.id))
+      .map((r) => [r.id, r]),
+  );
   let changed = false;
   for (const demo of DEMO_TUTORING_REQUESTS) {
     if (!byId.has(demo.id)) {

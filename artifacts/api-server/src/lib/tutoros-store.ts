@@ -1004,9 +1004,18 @@ function mapRequestRow(row: Record<string, unknown>): TutoringRequest {
   };
 }
 
-function seedTemplateRequests() {
+function seedTemplateRequests(forceOpen = false) {
+  const legacyIds = [
+    "template-math-im2-jordan",
+    "template-chem-honors-sam",
+    "template-english-maya",
+  ];
+  for (const legacyId of legacyIds) {
+    requestFallback.delete(legacyId);
+  }
   for (const demo of DEMO_TUTORING_REQUESTS) {
-    if (!requestFallback.has(demo.id)) {
+    const existing = requestFallback.get(demo.id);
+    if (forceOpen || !existing) {
       requestFallback.set(demo.id, {
         id: demo.id,
         studentName: demo.studentName,
@@ -1025,7 +1034,7 @@ function seedTemplateRequests() {
   }
 }
 
-seedTemplateRequests();
+seedTemplateRequests(true);
 
 export async function createTutoringRequest(input: {
   studentName: string;
@@ -1076,6 +1085,11 @@ export async function listTutoringRequests(filter?: {
   status?: TutoringRequestStatus;
 }): Promise<TutoringRequest[]> {
   seedTemplateRequests();
+  const legacyIds = new Set([
+    "template-math-im2-jordan",
+    "template-chem-honors-sam",
+    "template-english-maya",
+  ]);
   try {
     let path = `/tutoring_requests?order=created_at.desc&limit=100`;
     if (filter?.status) {
@@ -1083,13 +1097,17 @@ export async function listTutoringRequests(filter?: {
     }
     const data = await bbFetch(path);
     if (Array.isArray(data) && data.length > 0) {
-      const mapped = data.map((row) => mapRequestRow(row as Record<string, unknown>));
+      const mapped = data
+        .map((row) => mapRequestRow(row as Record<string, unknown>))
+        .filter((r) => !legacyIds.has(r.id));
       for (const req of mapped) requestFallback.set(req.id, req);
-      // Ensure template demos remain visible if BB is empty of templates
+      // Ensure the original 3 placeholder students remain visible when open.
       for (const demo of DEMO_TUTORING_REQUESTS) {
-        if (!mapped.some((r) => r.id === demo.id) && !filter?.status) {
+        if (!mapped.some((r) => r.id === demo.id)) {
           const local = requestFallback.get(demo.id);
-          if (local) mapped.push(local);
+          if (local && (!filter?.status || local.status === filter.status)) {
+            mapped.push(local);
+          }
         }
       }
       return mapped.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -1098,7 +1116,7 @@ export async function listTutoringRequests(filter?: {
     // fallback
   }
 
-  const all = Array.from(requestFallback.values());
+  const all = Array.from(requestFallback.values()).filter((r) => !legacyIds.has(r.id));
   const filtered = filter?.status ? all.filter((r) => r.status === filter.status) : all;
   return filtered.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }

@@ -14,6 +14,7 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `pnpm --filter @workspace/api-server run cleanup:stale-members` — delete DB accounts that are no longer in the current Google Sheet
 - Required env: `DATABASE_URL` — Postgres connection string
 - Required env: `SESSION_SECRET` — secret for express-session
+- Optional env: `EVEROS_API_KEY` — EverOS Cloud API key for TutorOS tutoring memory (`pip install -r lib/everos/requirements.txt` for the Python SDK)
 
 ## Stack
 
@@ -33,6 +34,10 @@ A private member portal for an NHS-style community club. Members log in to see t
 - `lib/db/src/schema/members.ts` — members table schema
 - `artifacts/api-server/src/routes/auth.ts` — login, logout, me
 - `artifacts/api-server/src/routes/dashboard.ts` — member dashboard data, goals, and remaining-hour calculations
+- `artifacts/api-server/src/routes/tutoring.ts` — EverOS-backed tutoring memory (prep context + session record)
+- `artifacts/api-server/src/lib/everos-client.ts` — EverOS Cloud HTTP client
+- `artifacts/api-server/src/lib/tutor-memory.ts` — TutorOS memory helpers (record + search)
+- `lib/everos/tutor_memory.py` — Python SDK mirror of tutoring memory (AI Tutor cookbook pattern)
 - `artifacts/api-server/src/lib/sheets.ts` — Google Sheets helper + username/password generation
 - `artifacts/member-portal/src/pages/` — login and dashboard pages
 
